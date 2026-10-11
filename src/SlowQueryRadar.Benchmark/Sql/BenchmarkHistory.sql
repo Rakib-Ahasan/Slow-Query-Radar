@@ -9,7 +9,7 @@ CREATE TABLE dbo.BenchmarkHistory (
     DurationMaxMs FLOAT NOT NULL,
     LogicalReads BIGINT NOT NULL,
     CpuTimeMs FLOAT NOT NULL,
-    RowCount BIGINT NOT NULL,
+    [RowCount] BIGINT NOT NULL,
     RanAtUtc DATETIME2 NOT NULL,
     RanBy NVARCHAR(100) NULL,
     FirstRowChecksum NVARCHAR(32) NULL
