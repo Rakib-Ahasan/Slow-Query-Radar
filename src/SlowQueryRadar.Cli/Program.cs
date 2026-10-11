@@ -9,6 +9,7 @@ using SlowQueryRadar.Analyzer;
 using SlowQueryRadar.Benchmark;
 using SlowQueryRadar.Cli.Commands;
 using SlowQueryRadar.Collector;
+using SlowQueryRadar.Core.Configuration;
 using SlowQueryRadar.Suggestions;
 
 namespace SlowQueryRadar.Cli;
@@ -33,6 +34,7 @@ public class Program
                 configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: false);
                 configuration.AddJsonFile($"appsettings.{context.HostingEnvironment.EnvironmentName}.json",
                     optional: true, reloadOnChange: false);
+                configuration.AddSharedAppSettings();
                 configuration.AddUserSecrets(typeof(Program).Assembly, optional: true);
                 configuration.AddEnvironmentVariables();
             })

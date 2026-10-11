@@ -23,3 +23,10 @@ secrets.json
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local shared config — never commit real connection strings
+appsettings.Shared.json
+appsettings.Shared.*.json
+!appsettings.Shared.template.json
+.env
+.env.local

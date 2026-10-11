@@ -7,6 +7,7 @@ using SlowQueryRadar.Api.Services;
 using SlowQueryRadar.Benchmark;
 using SlowQueryRadar.Collector;
 using SlowQueryRadar.Core;
+using SlowQueryRadar.Core.Configuration;
 using SlowQueryRadar.Profiler;
 using SlowQueryRadar.Suggestions;
 
@@ -16,7 +17,14 @@ if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT"
 }
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Configuration.AddUserSecrets<Program>(optional: true);
+builder.Configuration.Sources.Clear();
+builder.Configuration
+    .SetBasePath(AppContext.BaseDirectory)
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: false)
+    .AddSharedAppSettings()
+    .AddUserSecrets<Program>(optional: true)
+    .AddEnvironmentVariables();
 
 builder.Host.UseSerilog((context, configuration) => configuration
     .ReadFrom.Configuration(context.Configuration)

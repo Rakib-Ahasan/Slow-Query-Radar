@@ -19,10 +19,11 @@ public sealed class BenchmarkOptions
     public void Validate()
     {
         if (!string.Equals(Environment, "Dev", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(Environment, "Development", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(Environment, "Staging", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(Environment, "Prod", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("Benchmark Environment must be Dev or Staging.");
+            throw new InvalidOperationException("Benchmark Environment must be Dev, Development, or Staging.");
         }
 
         if (string.Equals(Environment, "Prod", StringComparison.OrdinalIgnoreCase))
