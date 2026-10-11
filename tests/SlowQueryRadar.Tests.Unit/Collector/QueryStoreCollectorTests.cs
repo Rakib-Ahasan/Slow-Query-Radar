@@ -30,7 +30,7 @@ public sealed class QueryStoreCollectorTests
     public async Task CollectTopSlowQueriesAsync_ImpactScoreMapsCorrectly()
     {
         var connection = new FakeQueryStoreConnection("READ_WRITE");
-        connection.AddQuery(1, "SELECT * FROM Users WHERE Id = @Id", 100, 5000, 200000, 5000, 200000);
+        connection.AddQuery(1, "SELECT * FROM Users WHERE Id = @Id", 100, 5, 200, 5000, 200000);
         var collector = CreateCollector(connection);
 
         var snapshots = await collector.CollectTopSlowQueriesAsync(
@@ -61,17 +61,17 @@ public sealed class QueryStoreCollectorTests
             _rows.Columns.Add("QueryId", typeof(long));
             _rows.Columns.Add("SqlText", typeof(string));
             _rows.Columns.Add("ExecCount", typeof(long));
-            _rows.Columns.Add("AvgDurationUs", typeof(double));
-            _rows.Columns.Add("TotalCpuUs", typeof(double));
+            _rows.Columns.Add("AvgDurationMs", typeof(double));
+            _rows.Columns.Add("TotalCpuMs", typeof(double));
             _rows.Columns.Add("TotalLogicalReads", typeof(long));
             _rows.Columns.Add("ImpactScore", typeof(double));
             _rows.Columns.Add("ExecutionPlanXml", typeof(string));
             _rows.Columns.Add("LastExecutionUtc", typeof(DateTime));
         }
 
-        public void AddQuery(long queryId, string sqlText, long execCount, double avgDurationUs,
-            double totalCpuUs, long logicalReads, double impactScore) =>
-            _rows.Rows.Add(queryId, sqlText, execCount, avgDurationUs, totalCpuUs,
+        public void AddQuery(long queryId, string sqlText, long execCount, double avgDurationMs,
+            double totalCpuMs, long logicalReads, double impactScore) =>
+            _rows.Rows.Add(queryId, sqlText, execCount, avgDurationMs, totalCpuMs,
                 logicalReads, impactScore, DBNull.Value, DateTime.UtcNow);
 
         private string _connectionString = string.Empty;

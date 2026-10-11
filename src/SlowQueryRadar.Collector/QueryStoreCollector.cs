@@ -32,8 +32,8 @@ internal sealed class SlowQuerySnapshotDto
     public long QueryId { get; set; }
     public string SqlText { get; set; } = string.Empty;
     public long ExecCount { get; set; }
-    public double AvgDurationUs { get; set; }
-    public double TotalCpuUs { get; set; }
+    public double AvgDurationMs { get; set; }
+    public double TotalCpuMs { get; set; }
     public long TotalLogicalReads { get; set; }
     public double ImpactScore { get; set; }
     public string? ExecutionPlanXml { get; set; }
@@ -43,34 +43,27 @@ internal sealed class SlowQuerySnapshotDto
 /// <summary>Collects slow queries from SQL Server Query Store.</summary>
 public sealed class QueryStoreCollector : IQueryStoreCollector
 {
-    private const string QueryStoreStateSql = "SELECT actual_state_desc FROM sys.database_query_store_options WHERE database_id = DB_ID();";
+    private const string QueryStoreStateSql = "SELECT actual_state_desc FROM sys.database_query_store_options;";
 
     private const string CollectionSql = """
         SELECT TOP (@topN)
-            q.query_id AS QueryId,
-            qt.text AS SqlText,
+            q.query_id,
+            qt.query_sql_text AS SqlText,
             SUM(rs.count_executions) AS ExecCount,
-            SUM(rs.avg_duration * rs.count_executions) / NULLIF(SUM(rs.count_executions), 0) AS AvgDurationUs,
-            SUM(rs.avg_cpu_time * rs.count_executions) AS TotalCpuUs,
-            SUM(rs.total_logical_reads) AS TotalLogicalReads,
+            AVG(rs.avg_duration) / 1000.0 AS AvgDurationMs,
+            SUM(rs.avg_cpu_time * rs.count_executions) / 1000.0 AS TotalCpuMs,
+            SUM(rs.avg_logical_io_reads * rs.count_executions) AS TotalLogicalReads,
             SUM(rs.avg_cpu_time * rs.count_executions) AS ImpactScore,
-            plan.ExecutionPlanXml,
-            MAX(rsi.start_time) AS LastExecutionUtc
+            TRY_CAST(p.query_plan AS NVARCHAR(MAX)) AS ExecutionPlanXml,
+            MAX(rsi.end_time) AS LastExecutionUtc
         FROM sys.query_store_query AS q
         INNER JOIN sys.query_store_query_text AS qt ON q.query_text_id = qt.query_text_id
         INNER JOIN sys.query_store_plan AS p ON q.query_id = p.query_id
         INNER JOIN sys.query_store_runtime_stats AS rs ON p.plan_id = rs.plan_id
         INNER JOIN sys.query_store_runtime_stats_interval AS rsi
             ON rs.runtime_stats_interval_id = rsi.runtime_stats_interval_id
-        OUTER APPLY
-        (
-            SELECT TOP (1) TRY_CAST(p2.query_plan AS xml) AS ExecutionPlanXml
-            FROM sys.query_store_plan AS p2
-            WHERE p2.query_id = q.query_id
-            ORDER BY p2.plan_id DESC
-        ) AS plan
         WHERE rsi.start_time > @since
-        GROUP BY q.query_id, qt.text, plan.ExecutionPlanXml
+        GROUP BY q.query_id, qt.query_sql_text, p.query_plan
         ORDER BY ImpactScore DESC;
         """;
 
@@ -126,8 +119,8 @@ public sealed class QueryStoreCollector : IQueryStoreCollector
             SqlText = dto.SqlText,
             NormalizedSqlHash = ComputeNormalizedSqlHash(dto.SqlText),
             ExecCount = dto.ExecCount,
-            AvgDurationMs = dto.AvgDurationUs / 1000d,
-            TotalCpuMs = dto.TotalCpuUs / 1000d,
+            AvgDurationMs = dto.AvgDurationMs,
+            TotalCpuMs = dto.TotalCpuMs,
             TotalLogicalReads = dto.TotalLogicalReads,
             ImpactScore = dto.ImpactScore,
             ExecutionPlanXml = dto.ExecutionPlanXml,
