@@ -3,8 +3,9 @@
 @inject SqlAnalyzer Analyzer
 @inject ISuggestionEngine Suggester
 @inject QueryBenchmarker Benchmarker
-@inject IJSRuntime Js
+@inject IJSRuntime JS
 @inject ILogger<QueryDetail> Logger
+@inject NavigationManager Navigation
 
 <PageTitle>Query @QueryId</PageTitle>
 
@@ -14,12 +15,16 @@
 }
 else if (_error is not null)
 {
-    <MudAlert Severity="MudSeverity.Error">@_error</MudAlert>
+    <MudAlert Severity="MudSeverity.Error">
+        @_error
+        <MudButton Class="ml-2" Variant="Variant.Outlined" OnClick="BackToDashboard">Back to Dashboard</MudButton>
+    </MudAlert>
 }
 else if (_notFound)
 {
     <MudAlert Severity="MudSeverity.Warning">
-        Query not found. <MudLink href="/">Back to dashboard</MudLink>
+        Query @QueryId not found in Query Store (last 24h)
+        <MudButton Class="ml-2" Variant="Variant.Outlined" OnClick="BackToDashboard">Back to Dashboard</MudButton>
     </MudAlert>
 }
 else if (_snapshot is null)
@@ -144,12 +149,13 @@ else
         }
         catch (Exception exception)
         {
-            _error = exception.Message;
-            Logger.LogError(exception, "Failed to load query detail for {QueryId}", QueryId);
+            _error = $"Unexpected error: {exception.Message}";
+            Logger.LogError(exception, "QueryDetail load failed");
         }
         finally
         {
             _loading = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -184,9 +190,11 @@ else
         }
     }
 
-    private Task CopySqlAsync() => Js.InvokeVoidAsync("navigator.clipboard.writeText", _snapshot?.SqlText ?? string.Empty).AsTask();
+    private Task CopySqlAsync() => JS.InvokeVoidAsync("navigator.clipboard.writeText", _snapshot?.SqlText ?? string.Empty).AsTask();
 
-    private Task CopyFixAsync() => Js.InvokeVoidAsync("navigator.clipboard.writeText", _suggestion?.DeterministicFix ?? string.Empty).AsTask();
+    private Task CopyFixAsync() => JS.InvokeVoidAsync("navigator.clipboard.writeText", _suggestion?.DeterministicFix ?? string.Empty).AsTask();
+
+    private void BackToDashboard() => Navigation.NavigateTo("/");
 
     private static Color SeverityColor(string severity) => severity switch
     {

@@ -27,13 +27,11 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
 builder.Services.AddSingleton<QueryStateStore>();
-builder.Services.AddHttpClient<QueriesApiClient>(client =>
+builder.Services.AddHttpClient<IQueriesApiClient, QueriesApiClient>(client =>
 {
-    var selfUrl = builder.Configuration["SelfUrl"] ?? "https://localhost:7001/";
+    var selfUrl = builder.Configuration["SelfUrl"] ?? "https://localhost:7242/";
     client.BaseAddress = new Uri(selfUrl, UriKind.Absolute);
 });
-builder.Services.AddScoped<IQueriesApiClient>(provider =>
-    provider.GetRequiredService<QueriesApiClient>());
 
 builder.Services.AddSlowQueryRadarCollector(builder.Configuration);
 builder.Services.AddSlowQueryRadarProfiler(builder.Configuration);
@@ -78,3 +76,7 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+
+public partial class Program
+{
+}
