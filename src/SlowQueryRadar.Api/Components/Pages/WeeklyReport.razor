@@ -18,7 +18,7 @@
 
     @if (_error is not null)
     {
-        <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+        <MudAlert Severity="MudSeverity.Error" Class="mb-4">@_error</MudAlert>
     }
 
     <MudText Typo="Typo.h6" Class="mb-2">Top 10 slow queries</MudText>
@@ -28,10 +28,10 @@
     </MudTable>
 
     <MudText Typo="Typo.h6" Class="mt-6 mb-2">Findings by severity</MudText>
-    <MudAlert Severity="Severity.Info">Run analysis from the query detail page to populate findings.</MudAlert>
+    <MudAlert Severity="MudSeverity.Info">Run analysis from the query detail page to populate findings.</MudAlert>
 
     <MudText Typo="Typo.h6" Class="mt-6 mb-2">Validated fixes</MudText>
-    <MudAlert Severity="Severity.Info">No validated benchmark fixes are available in the current report state.</MudAlert>
+    <MudAlert Severity="MudSeverity.Info">No validated benchmark fixes are available in the current report state.</MudAlert>
 </div>
 
 @code {

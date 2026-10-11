@@ -1,5 +1,6 @@
 //tests/SlowQueryRadar.Tests.Unit/Collector/QueryStoreCollectorGetByIdTests.cs
 using Xunit;
+using SlowQueryRadar.Core;
 
 namespace SlowQueryRadar.Tests.Unit.Collector;
 
@@ -29,5 +30,17 @@ public sealed class QueryStoreCollectorGetByIdTests
         var snapshot = await collector.GetByQueryIdAsync(999999, CancellationToken.None);
 
         Assert.Null(snapshot);
+    }
+
+    [Fact]
+    public async Task GetByQueryIdAsync_WhenQueryStoreIsOff_ThrowsQueryStoreDisabledException()
+    {
+        var connection = new QueryStoreCollectorTests.FakeQueryStoreConnection("OFF");
+        var collector = QueryStoreCollectorTests.CreateCollector(connection);
+
+        var exception = await Assert.ThrowsAsync<QueryStoreDisabledException>(() =>
+            collector.GetByQueryIdAsync(23, CancellationToken.None));
+
+        Assert.Contains("QUERY_STORE = ON", exception.Message);
     }
 }

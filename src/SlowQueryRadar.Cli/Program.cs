@@ -33,7 +33,7 @@ public class Program
                 configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: false);
                 configuration.AddJsonFile($"appsettings.{context.HostingEnvironment.EnvironmentName}.json",
                     optional: true, reloadOnChange: false);
-                configuration.AddUserSecrets(UserSecretsId);
+                configuration.AddUserSecrets(typeof(Program).Assembly, optional: true);
                 configuration.AddEnvironmentVariables();
             })
             .ConfigureServices((context, services) =>

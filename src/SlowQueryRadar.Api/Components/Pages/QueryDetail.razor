@@ -4,16 +4,21 @@
 @inject ISuggestionEngine Suggester
 @inject QueryBenchmarker Benchmarker
 @inject IJSRuntime Js
+@inject ILogger<QueryDetail> Logger
 
 <PageTitle>Query @QueryId</PageTitle>
 
-@if (_error is not null)
+@if (_loading)
 {
-    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_error is not null)
+{
+    <MudAlert Severity="MudSeverity.Error">@_error</MudAlert>
 }
 else if (_notFound)
 {
-    <MudAlert Severity="Severity.Warning">
+    <MudAlert Severity="MudSeverity.Warning">
         Query not found. <MudLink href="/">Back to dashboard</MudLink>
     </MudAlert>
 }
@@ -39,11 +44,11 @@ else
             }
             else
             {
-                <MudList T="FindingDto">
+                <MudList T="Finding">
                     @foreach (var finding in _analysis.Findings)
                     {
                         <MudListItem>
-                            <MudChip Color="SeverityColor(finding.Severity)" Size="Size.Small">@finding.Severity</MudChip>
+                            <MudChip Color="SeverityColor(finding.Severity.ToString())" Size="Size.Small">@finding.Severity</MudChip>
                             <MudText Class="ml-2">@finding.Message</MudText>
                             @if (!string.IsNullOrWhiteSpace(finding.Evidence))
                             {
@@ -55,7 +60,7 @@ else
             }
         </MudTabPanel>
         <MudTabPanel Text="Suggested fix">
-            @if (_analysis?.Suggestion is null)
+            @if (_suggestion is null)
             {
                 <MudText>No suggestion is available.</MudText>
             }
@@ -65,10 +70,10 @@ else
                     <MudText Typo="Typo.h6">Deterministic fix</MudText>
                     <MudButton Variant="Variant.Outlined" OnClick="CopyFixAsync">Copy fix</MudButton>
                 </MudStack>
-                <pre class="sql-block">@_analysis.Suggestion.DeterministicFix</pre>
-                @if (!string.IsNullOrWhiteSpace(_analysis.Suggestion.AiExplanation))
+                 <pre class="sql-block">@_suggestion.DeterministicFix</pre>
+                 @if (!string.IsNullOrWhiteSpace(_suggestion.AiExplanation))
                 {
-                    <MudAlert Severity="Severity.Info">@_analysis.Suggestion.AiExplanation</MudAlert>
+                    <MudAlert Severity="MudSeverity.Info">@_suggestion.AiExplanation</MudAlert>
                 }
             }
         </MudTabPanel>
@@ -90,12 +95,14 @@ else
 @code {
     [Parameter] public long QueryId { get; set; }
 
-    private SlowQueryDto? _snapshot;
-    private AnalyzeResponseDto? _analysis;
+    private SlowQuerySnapshot? _snapshot;
+    private AnalysisResult? _analysis;
+    private Suggestion? _suggestion;
     private BenchmarkResultDto? _benchmark;
     private int _warmupRuns = 1;
     private int _measuredRuns = 5;
     private bool _benchmarking;
+    private bool _loading;
     private string? _error;
     private bool _notFound;
     private readonly string[] _chartLabels = ["Duration P50 (ms)", "Logical reads"];
@@ -103,27 +110,29 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
+        using var cancellationSource = new CancellationTokenSource();
+        var ct = cancellationSource.Token;
+        _loading = true;
         _snapshot = null;
         _analysis = null;
+        _suggestion = null;
         _error = null;
         _notFound = false;
 
         try
         {
-            var snapshot = await Collector.GetByQueryIdAsync(QueryId, CancellationToken.None);
+            var snapshot = await Collector.GetByQueryIdAsync(QueryId, ct);
             if (snapshot is null)
             {
                 _notFound = true;
                 return;
             }
 
-            _snapshot = ApiMapper.ToDto(snapshot);
-            var analysis = Analyzer.Analyze(snapshot, [], CancellationToken.None);
-            var suggestion = await Suggester.BuildSuggestionAsync(analysis, snapshot.SqlText, CancellationToken.None);
-            _analysis = new AnalyzeResponseDto(
-                ApiMapper.ToDto(snapshot),
-                analysis.Findings.Select(ApiMapper.ToDto).ToArray(),
-                ApiMapper.ToDto(suggestion));
+            var analysis = await Analyzer.AnalyzeAsync(snapshot, Array.Empty<DapperLogEntry>(), ct);
+            var suggestion = await Suggester.BuildSuggestionAsync(analysis, snapshot.SqlText, ct);
+            _snapshot = snapshot;
+            _analysis = analysis;
+            _suggestion = suggestion;
         }
         catch (QueryStoreDisabledException exception)
         {
@@ -136,6 +145,11 @@ else
         catch (Exception exception)
         {
             _error = exception.Message;
+            Logger.LogError(exception, "Failed to load query detail for {QueryId}", QueryId);
+        }
+        finally
+        {
+            _loading = false;
         }
     }
 
@@ -172,7 +186,7 @@ else
 
     private Task CopySqlAsync() => Js.InvokeVoidAsync("navigator.clipboard.writeText", _snapshot?.SqlText ?? string.Empty).AsTask();
 
-    private Task CopyFixAsync() => Js.InvokeVoidAsync("navigator.clipboard.writeText", _analysis?.Suggestion?.DeterministicFix ?? string.Empty).AsTask();
+    private Task CopyFixAsync() => Js.InvokeVoidAsync("navigator.clipboard.writeText", _suggestion?.DeterministicFix ?? string.Empty).AsTask();
 
     private static Color SeverityColor(string severity) => severity switch
     {

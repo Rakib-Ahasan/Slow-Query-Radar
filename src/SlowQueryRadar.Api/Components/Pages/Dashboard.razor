@@ -16,7 +16,7 @@
 
 @if (_error is not null)
 {
-    <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+    <MudAlert Severity="MudSeverity.Error" Class="mb-4">@_error</MudAlert>
 }
 
 <MudTable T="SlowQueryDto" Items="_queries" Hover="true" Dense="true" Loading="_loading" OnRowClick="@HandleRowClick">
@@ -35,7 +35,7 @@
         <MudTd DataLabel="Avg ms">@context.AvgDurationMs.ToString("F2")</MudTd>
         <MudTd DataLabel="Total CPU ms">@context.TotalCpuMs.ToString("F2")</MudTd>
         <MudTd DataLabel="Impact">@context.ImpactScore.ToString("F2")</MudTd>
-        <MudTd DataLabel="Severity"><MudChip T="string" Color="@(context.ImpactScore > 0 ? Color.Error : Color.Default)" Size="Size.Small">@(context.ImpactScore > 0 ? "High" : "Low")</MudChip></MudTd>
+        <MudTd DataLabel="Severity"><MudChip T="string" Color="GetSeverityColor(context.ImpactScore)" Size="Size.Small">@GetSeverity(context.ImpactScore)</MudChip></MudTd>
         <MudTd DataLabel="Action"><MudButton Size="Size.Small" Variant="Variant.Outlined" @onclick="() => NavigateToQuery(context.QueryId)">Open</MudButton></MudTd>
     </RowTemplate>
 </MudTable>
@@ -47,6 +47,22 @@
     private string? _error;
 
     private int HighPriorityCount => _queries.Count(query => query.ImpactScore > 0);
+
+    private static string GetSeverity(double impact) => impact switch
+    {
+        >= 1_000_000 => "High",
+        >= 100_000 => "Medium",
+        >= 10_000 => "Low",
+        _ => "Info"
+    };
+
+    private static Color GetSeverityColor(double impact) => GetSeverity(impact) switch
+    {
+        "High" => Color.Error,
+        "Medium" => Color.Warning,
+        "Low" => Color.Info,
+        _ => Color.Default
+    };
 
     protected override async Task OnInitializedAsync()
     {

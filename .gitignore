@@ -11,6 +11,11 @@
 pr-report.json
 report.html
 
+# CLI debug output
+cli-*-output.txt
+*-output.txt
+*.log
+
 # Local secrets and environment overrides
 appsettings.*.local.json
 secrets.json

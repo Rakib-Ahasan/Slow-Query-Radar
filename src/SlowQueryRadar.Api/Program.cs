@@ -10,7 +10,13 @@ using SlowQueryRadar.Core;
 using SlowQueryRadar.Profiler;
 using SlowQueryRadar.Suggestions;
 
+if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")))
+{
+    Environment.SetEnvironmentVariable("DOTNET_ENVIRONMENT", "Development");
+}
+
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddUserSecrets<Program>(optional: true);
 
 builder.Host.UseSerilog((context, configuration) => configuration
     .ReadFrom.Configuration(context.Configuration)

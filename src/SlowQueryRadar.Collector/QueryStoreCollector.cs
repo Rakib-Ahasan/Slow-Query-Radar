@@ -68,7 +68,7 @@ public sealed class QueryStoreCollector : IQueryStoreCollector
         """;
 
     private const string QueryByIdSql = """
-        SELECT
+        SELECT TOP (1)
             q.query_id AS QueryId,
             qt.query_sql_text AS SqlText,
             SUM(rs.count_executions) AS ExecCount,
