@@ -1,4 +1,5 @@
 @page "/query/{QueryId:long}"
+@rendermode InteractiveServer
 @inject IQueryStoreCollector Collector
 @inject SqlAnalyzer Analyzer
 @inject ISuggestionEngine Suggester
@@ -23,7 +24,7 @@ else if (_error is not null)
 else if (_notFound)
 {
     <MudAlert Severity="MudSeverity.Warning">
-        Query @QueryId not found in Query Store (last 24h)
+        Query @QueryId not found in the last 24h.
         <MudButton Class="ml-2" Variant="Variant.Outlined" OnClick="BackToDashboard">Back to Dashboard</MudButton>
     </MudAlert>
 }
@@ -115,17 +116,19 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        using var cancellationSource = new CancellationTokenSource();
-        var ct = cancellationSource.Token;
+        Logger.LogInformation("QueryDetail OnParametersSetAsync QueryId={QueryId}", QueryId);
         _loading = true;
         _snapshot = null;
         _analysis = null;
         _suggestion = null;
         _error = null;
         _notFound = false;
+        await InvokeAsync(StateHasChanged);
 
         try
         {
+            using var cancellationSource = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var ct = cancellationSource.Token;
             var snapshot = await Collector.GetByQueryIdAsync(QueryId, ct);
             if (snapshot is null)
             {
@@ -141,11 +144,15 @@ else
         }
         catch (QueryStoreDisabledException exception)
         {
-            _error = $"Query Store unavailable: {exception.Message}";
+            _error = $"Query Store is disabled: {exception.Message}";
         }
         catch (Microsoft.Data.SqlClient.SqlException exception)
         {
-            _error = $"Unable to load query details: {exception.Message}";
+            _error = $"Database error: {exception.Message}";
+        }
+        catch (OperationCanceledException)
+        {
+            _error = "Query timed out after 30 seconds.";
         }
         catch (Exception exception)
         {

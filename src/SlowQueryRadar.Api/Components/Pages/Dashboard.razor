@@ -1,4 +1,5 @@
 @page "/"
+@rendermode InteractiveServer
 @implements IAsyncDisposable
 @inject IQueryStoreCollector Collector
 @inject NavigationManager Nav
@@ -36,7 +37,7 @@
         <MudTd DataLabel="Total CPU ms">@context.TotalCpuMs.ToString("F2")</MudTd>
         <MudTd DataLabel="Impact">@context.ImpactScore.ToString("F2")</MudTd>
         <MudTd DataLabel="Severity"><MudChip T="string" Color="GetSeverityColor(context.ImpactScore)" Size="Size.Small">@GetSeverity(context.ImpactScore)</MudChip></MudTd>
-        <MudTd DataLabel="Action"><MudButton Size="Size.Small" Variant="Variant.Outlined" @onclick="() => NavigateToQuery(context.QueryId)">Open</MudButton></MudTd>
+        <MudTd DataLabel="Action"><MudButton Size="Size.Small" Variant="Variant.Outlined" @onclick="() => OpenQuery(context.QueryId)">Open</MudButton></MudTd>
     </RowTemplate>
 </MudTable>
 
@@ -93,13 +94,16 @@
         }
     }
 
-    private void NavigateToQuery(long queryId) => Nav.NavigateTo($"/query/{queryId}");
+    private void OpenQuery(long queryId)
+    {
+        Nav.NavigateTo($"/query/{queryId}", forceLoad: true);
+    }
 
     private void HandleRowClick(TableRowClickEventArgs<SlowQueryDto> args)
     {
         if (args.Item is not null)
         {
-            Nav.NavigateTo($"/query/{args.Item.QueryId}");
+            OpenQuery(args.Item.QueryId);
         }
     }
 
