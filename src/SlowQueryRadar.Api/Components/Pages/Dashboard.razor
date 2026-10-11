@@ -1,7 +1,7 @@
 @page "/"
 @implements IAsyncDisposable
-@inject IQueriesApiClient ApiClient
-@inject NavigationManager Navigation
+@inject IQueryStoreCollector Collector
+@inject NavigationManager Nav
 
 <PageTitle>Slow Query Radar</PageTitle>
 
@@ -36,7 +36,7 @@
         <MudTd DataLabel="Total CPU ms">@context.TotalCpuMs.ToString("F2")</MudTd>
         <MudTd DataLabel="Impact">@context.ImpactScore.ToString("F2")</MudTd>
         <MudTd DataLabel="Severity"><MudChip T="string" Color="@(context.ImpactScore > 0 ? Color.Error : Color.Default)" Size="Size.Small">@(context.ImpactScore > 0 ? "High" : "Low")</MudChip></MudTd>
-        <MudTd DataLabel="Action"><MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => OpenQuery(context.QueryId))">Open</MudButton></MudTd>
+        <MudTd DataLabel="Action"><MudButton Size="Size.Small" Variant="Variant.Outlined" @onclick="() => NavigateToQuery(context.QueryId)">Open</MudButton></MudTd>
     </RowTemplate>
 </MudTable>
 
@@ -63,7 +63,8 @@
         _loading = true;
         try
         {
-            _queries = await ApiClient.GetTopAsync(20, 24, CancellationToken.None);
+            var snapshots = await Collector.CollectTopSlowQueriesAsync(20, TimeSpan.FromHours(24), CancellationToken.None);
+            _queries = snapshots.Select(ApiMapper.ToDto).ToArray();
             _error = null;
         }
         catch (Exception exception)
@@ -76,15 +77,15 @@
         }
     }
 
+    private void NavigateToQuery(long queryId) => Nav.NavigateTo($"/query/{queryId}");
+
     private void HandleRowClick(TableRowClickEventArgs<SlowQueryDto> args)
     {
         if (args.Item is not null)
         {
-            OpenQuery(args.Item.QueryId);
+            Nav.NavigateTo($"/query/{args.Item.QueryId}");
         }
     }
-
-    private void OpenQuery(long queryId) => Navigation.NavigateTo($"/query/{queryId}");
 
     public async ValueTask DisposeAsync()
     {

@@ -27,7 +27,7 @@ public class SlowQuerySnapshot
     /// <summary>Gets or sets the execution plan XML, when available.</summary>
     public string? ExecutionPlanXml { get; set; }
     /// <summary>Gets or sets the last execution time in UTC.</summary>
-    public DateTime LastExecutionUtc { get; set; }
+    public DateTimeOffset LastExecutionUtc { get; set; }
     /// <summary>Gets or sets the capture time in UTC.</summary>
-    public DateTime CapturedAtUtc { get; set; }
+    public DateTimeOffset CapturedAtUtc { get; set; }
 }

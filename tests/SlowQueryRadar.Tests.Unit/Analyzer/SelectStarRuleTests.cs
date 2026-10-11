@@ -19,4 +19,14 @@ public sealed class SelectStarRuleTests
         Assert.Equal("SQLR-006", finding.RuleId);
         Assert.Equal(Severity.Medium, finding.Severity);
     }
+
+    [Fact]
+    public void SelectStarProducesFindingAfterParameterPrefixNormalization()
+    {
+        const string sql = "(@1 smallint)SELECT * FROM [Orders] WHERE [CustomerId]=@1";
+        var finding = Assert.Single(new SelectStarRule().Evaluate(
+            new SqlAnalysisContext(sql, SqlAnalyzer.ParseSql(sql).First(statement => statement is not Microsoft.SqlServer.TransactSql.ScriptDom.DeclareVariableStatement), null)));
+
+        Assert.Equal("SQLR-006", finding.RuleId);
+    }
 }

@@ -1,10 +1,23 @@
 @page "/query/{QueryId:long}"
-@inject IQueriesApiClient ApiClient
+@inject IQueryStoreCollector Collector
+@inject SqlAnalyzer Analyzer
+@inject ISuggestionEngine Suggester
+@inject QueryBenchmarker Benchmarker
 @inject IJSRuntime Js
 
 <PageTitle>Query @QueryId</PageTitle>
 
-@if (_snapshot is null)
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error">@_error</MudAlert>
+}
+else if (_notFound)
+{
+    <MudAlert Severity="Severity.Warning">
+        Query not found. <MudLink href="/">Back to dashboard</MudLink>
+    </MudAlert>
+}
+else if (_snapshot is null)
 {
     <MudProgressCircular Indeterminate="true" />
 }
@@ -83,17 +96,46 @@ else
     private int _warmupRuns = 1;
     private int _measuredRuns = 5;
     private bool _benchmarking;
+    private string? _error;
+    private bool _notFound;
     private readonly string[] _chartLabels = ["Duration P50 (ms)", "Logical reads"];
     private List<ChartSeries<double>> _chartSeries = [];
 
     protected override async Task OnParametersSetAsync()
     {
-        _snapshot = await ApiClient.GetAsync(QueryId, CancellationToken.None);
-        if (_snapshot is not null)
+        _snapshot = null;
+        _analysis = null;
+        _error = null;
+        _notFound = false;
+
+        try
         {
-            _analysis = await ApiClient.AnalyzeAsync(
-                new AnalyzeRequestDto(_snapshot.SqlText, 20, 24),
-                CancellationToken.None);
+            var snapshot = await Collector.GetByQueryIdAsync(QueryId, CancellationToken.None);
+            if (snapshot is null)
+            {
+                _notFound = true;
+                return;
+            }
+
+            _snapshot = ApiMapper.ToDto(snapshot);
+            var analysis = Analyzer.Analyze(snapshot, [], CancellationToken.None);
+            var suggestion = await Suggester.BuildSuggestionAsync(analysis, snapshot.SqlText, CancellationToken.None);
+            _analysis = new AnalyzeResponseDto(
+                ApiMapper.ToDto(snapshot),
+                analysis.Findings.Select(ApiMapper.ToDto).ToArray(),
+                ApiMapper.ToDto(suggestion));
+        }
+        catch (QueryStoreDisabledException exception)
+        {
+            _error = $"Query Store unavailable: {exception.Message}";
+        }
+        catch (Microsoft.Data.SqlClient.SqlException exception)
+        {
+            _error = $"Unable to load query details: {exception.Message}";
+        }
+        catch (Exception exception)
+        {
+            _error = exception.Message;
         }
     }
 
@@ -102,10 +144,18 @@ else
         _benchmarking = true;
         try
         {
-            _benchmark = await ApiClient.BenchmarkAsync(
-                QueryId,
-                new BenchmarkRequestDto(_warmupRuns, _measuredRuns),
+            if (_snapshot is null)
+            {
+                return;
+            }
+
+            var benchmark = await Benchmarker.RunAsync(
+                _snapshot.SqlText,
+                null,
+                _warmupRuns,
+                _measuredRuns,
                 CancellationToken.None);
+            _benchmark = ApiMapper.ToDto(benchmark);
             if (_benchmark is not null)
             {
                 _chartSeries =

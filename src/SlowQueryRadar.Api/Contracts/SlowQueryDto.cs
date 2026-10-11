@@ -12,8 +12,8 @@ public sealed record SlowQueryDto(
     long TotalLogicalReads,
     double ImpactScore,
     string? ExecutionPlanXml,
-    DateTime LastExecutionUtc,
-    DateTime CapturedAtUtc);
+    DateTimeOffset LastExecutionUtc,
+    DateTimeOffset CapturedAtUtc);
 
 /// <summary>JSON representation of an analyzer finding.</summary>
 public sealed record FindingDto(

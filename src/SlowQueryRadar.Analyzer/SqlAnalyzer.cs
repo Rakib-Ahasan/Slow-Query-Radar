@@ -3,12 +3,17 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 using SlowQueryRadar.Core.Abstractions;
 using SlowQueryRadar.Core.Models;
 using SlowQueryRadar.Analyzer.Rules;
+using System.Text.RegularExpressions;
 
 namespace SlowQueryRadar.Analyzer;
 
 /// <summary>Analyzes SQL text, execution plans, and recent profiler entries.</summary>
 public sealed class SqlAnalyzer
 {
+    private static readonly Regex ParameterPrefixRegex = new(
+        @"^\s*\((?<parameters>.*?)\)\s*(?=(?:SELECT|WITH|INSERT|UPDATE|DELETE|MERGE|EXEC|DECLARE)\b)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
     private readonly IReadOnlyList<ISqlRule> _rules;
 
     /// <summary>Initializes an analyzer with the configured SQL rules.</summary>
@@ -26,11 +31,13 @@ public sealed class SqlAnalyzer
     {
         ArgumentNullException.ThrowIfNull(sql);
         var parser = new TSql170Parser(initialQuotedIdentifiers: true);
-        using var reader = new StringReader(sql);
+        var transformedSql = TransformParameterPrefix(sql);
+        using var reader = new StringReader(transformedSql);
         var fragment = parser.Parse(reader, out IList<ParseError> errors);
         if (errors.Count > 0)
         {
-            throw new UnsafeQueryException(errors[0].Message);
+            var preview = sql.Length <= 200 ? sql : sql[..200];
+            throw new UnsafeQueryException($"{errors[0].Message} SQL: {preview}");
         }
 
         if (fragment is TSqlScript script)
@@ -41,6 +48,30 @@ public sealed class SqlAnalyzer
         }
 
         return [fragment];
+    }
+
+    private static string TransformParameterPrefix(string sql)
+    {
+        var match = ParameterPrefixRegex.Match(sql);
+        if (!match.Success || string.IsNullOrWhiteSpace(match.Groups["parameters"].Value))
+        {
+            return sql;
+        }
+
+        var declarations = match.Groups["parameters"].Value
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(parameter => parameter.Trim())
+            .ToArray();
+        if (declarations.Length == 0 || declarations.Any(parameter =>
+                !Regex.IsMatch(parameter, @"^@\w+\s+.+$", RegexOptions.CultureInvariant)))
+        {
+            return sql;
+        }
+
+        var declareBlock = string.Join(
+            Environment.NewLine,
+            declarations.Select(parameter => $"DECLARE {parameter};"));
+        return declareBlock + Environment.NewLine + sql[match.Length..];
     }
 
     /// <summary>Analyzes a snapshot synchronously using all configured rules.</summary>
@@ -63,7 +94,9 @@ public sealed class SqlAnalyzer
             throw new UnsafeQueryException("No SQL statement was found.");
         }
 
-        var context = new SqlAnalysisContext(snapshot.SqlText, statements[0], snapshot.ExecutionPlanXml);
+        var parsedStatement = statements.FirstOrDefault(statement => statement is not DeclareVariableStatement)
+            ?? statements[0];
+        var context = new SqlAnalysisContext(snapshot.SqlText, parsedStatement, snapshot.ExecutionPlanXml);
         var findings = new List<Finding>();
         foreach (var rule in _rules)
         {

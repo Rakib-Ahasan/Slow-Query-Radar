@@ -37,7 +37,7 @@ internal sealed class SlowQuerySnapshotDto
     public long TotalLogicalReads { get; set; }
     public double ImpactScore { get; set; }
     public string? ExecutionPlanXml { get; set; }
-    public DateTime LastExecutionUtc { get; set; }
+    public DateTimeOffset LastExecutionUtc { get; set; }
 }
 
 /// <summary>Collects slow queries from SQL Server Query Store.</summary>
@@ -47,7 +47,7 @@ public sealed class QueryStoreCollector : IQueryStoreCollector
 
     private const string CollectionSql = """
         SELECT TOP (@topN)
-            q.query_id,
+            q.query_id AS QueryId,
             qt.query_sql_text AS SqlText,
             SUM(rs.count_executions) AS ExecCount,
             AVG(rs.avg_duration) / 1000.0 AS AvgDurationMs,
@@ -65,6 +65,28 @@ public sealed class QueryStoreCollector : IQueryStoreCollector
         WHERE rsi.start_time > @since
         GROUP BY q.query_id, qt.query_sql_text, p.query_plan
         ORDER BY ImpactScore DESC;
+        """;
+
+    private const string QueryByIdSql = """
+        SELECT
+            q.query_id AS QueryId,
+            qt.query_sql_text AS SqlText,
+            SUM(rs.count_executions) AS ExecCount,
+            AVG(rs.avg_duration) / 1000.0 AS AvgDurationMs,
+            SUM(rs.avg_cpu_time * rs.count_executions) / 1000.0 AS TotalCpuMs,
+            SUM(rs.avg_logical_io_reads * rs.count_executions) AS TotalLogicalReads,
+            SUM(rs.avg_cpu_time * rs.count_executions) AS ImpactScore,
+            TRY_CAST(p.query_plan AS NVARCHAR(MAX)) AS ExecutionPlanXml,
+            MAX(rsi.end_time) AS LastExecutionUtc
+        FROM sys.query_store_query AS q
+        INNER JOIN sys.query_store_query_text AS qt ON q.query_text_id = qt.query_text_id
+        INNER JOIN sys.query_store_plan AS p ON q.query_id = p.query_id
+        INNER JOIN sys.query_store_runtime_stats AS rs ON p.plan_id = rs.plan_id
+        INNER JOIN sys.query_store_runtime_stats_interval AS rsi
+            ON rs.runtime_stats_interval_id = rsi.runtime_stats_interval_id
+        WHERE q.query_id = @queryId
+          AND rsi.start_time > DATEADD(HOUR, -24, GETUTCDATE())
+        GROUP BY q.query_id, qt.query_sql_text, p.query_plan;
         """;
 
     private readonly QueryStoreOptions _options;
@@ -112,26 +134,52 @@ public sealed class QueryStoreCollector : IQueryStoreCollector
             new { since, topN },
             cancellationToken: ct)).ConfigureAwait(false)).AsList();
 
-        var capturedAt = DateTime.UtcNow;
-        var snapshots = rows.Select(dto => new SlowQuerySnapshot
-        {
-            QueryId = dto.QueryId,
-            SqlText = dto.SqlText,
-            NormalizedSqlHash = ComputeNormalizedSqlHash(dto.SqlText),
-            ExecCount = dto.ExecCount,
-            AvgDurationMs = dto.AvgDurationMs,
-            TotalCpuMs = dto.TotalCpuMs,
-            TotalLogicalReads = dto.TotalLogicalReads,
-            ImpactScore = dto.ImpactScore,
-            ExecutionPlanXml = dto.ExecutionPlanXml,
-            LastExecutionUtc = dto.LastExecutionUtc,
-            CapturedAtUtc = capturedAt
-        }).ToList();
+        var capturedAt = DateTimeOffset.UtcNow;
+        var snapshots = rows.Select(dto => MapSnapshot(dto, capturedAt)).ToList();
 
         _logger.Information("Collected {Count} slow queries with topN {TopN} and lookback {Lookback}",
             snapshots.Count, topN, lookback);
         return snapshots;
     }
+
+    /// <inheritdoc />
+    public async Task<SlowQuerySnapshot?> GetByQueryIdAsync(long queryId, CancellationToken ct)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(queryId);
+
+        await using var connection = _connectionFactory();
+        await connection.OpenAsync(ct).ConfigureAwait(false);
+
+        var state = await connection.QuerySingleAsync<string>(new CommandDefinition(
+            QueryStoreStateSql, cancellationToken: ct)).ConfigureAwait(false);
+        if (!string.Equals(state, "READ_WRITE", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new QueryStoreDisabledException(
+                $"Query Store is not enabled. Run: ALTER DATABASE {connection.Database} SET QUERY_STORE = ON;");
+        }
+
+        var dto = await connection.QueryFirstOrDefaultAsync<SlowQuerySnapshotDto>(new CommandDefinition(
+            QueryByIdSql,
+            new { queryId },
+            cancellationToken: ct)).ConfigureAwait(false);
+
+        return dto is null ? null : MapSnapshot(dto, DateTimeOffset.UtcNow);
+    }
+
+    private static SlowQuerySnapshot MapSnapshot(SlowQuerySnapshotDto dto, DateTimeOffset capturedAt) => new()
+    {
+        QueryId = dto.QueryId,
+        SqlText = dto.SqlText,
+        NormalizedSqlHash = ComputeNormalizedSqlHash(dto.SqlText),
+        ExecCount = dto.ExecCount,
+        AvgDurationMs = dto.AvgDurationMs,
+        TotalCpuMs = dto.TotalCpuMs,
+        TotalLogicalReads = dto.TotalLogicalReads,
+        ImpactScore = dto.ImpactScore,
+        ExecutionPlanXml = dto.ExecutionPlanXml,
+        LastExecutionUtc = dto.LastExecutionUtc,
+        CapturedAtUtc = capturedAt
+    };
 
     private static string ComputeNormalizedSqlHash(string sqlText)
     {

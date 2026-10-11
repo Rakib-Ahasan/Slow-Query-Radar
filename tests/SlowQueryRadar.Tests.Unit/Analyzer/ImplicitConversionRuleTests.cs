@@ -17,12 +17,15 @@ public sealed class ImplicitConversionRuleTests
 
         Assert.Equal("SQLR-004", finding.RuleId);
         Assert.Equal(Severity.High, finding.Severity);
+        Assert.Contains("smallint", finding.SuggestedFix ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     private static SqlAnalysisContext CreateContext()
     {
         var xml = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Plans", "implicit-conversion.sqlplan"));
-        const string sql = "SELECT * FROM dbo.Users WHERE Id = @Id";
-        return new SqlAnalysisContext(sql, SqlAnalyzer.ParseSql(sql)[0], xml);
+        const string sql = "(@Id smallint)SELECT * FROM dbo.Users WHERE Id = @Id";
+        var statement = SqlAnalyzer.ParseSql(sql)
+            .First(fragment => fragment is not Microsoft.SqlServer.TransactSql.ScriptDom.DeclareVariableStatement);
+        return new SqlAnalysisContext(sql, statement, xml);
     }
 }

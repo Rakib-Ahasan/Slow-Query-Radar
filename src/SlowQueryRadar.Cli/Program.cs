@@ -59,7 +59,16 @@ public class Program
         root.Add(ReportCommand.Create(host.Services));
         root.Add(ScanRepoCommand.Create());
         root.Add(BenchmarkCommand.Create(host.Services));
-        return await root.Parse(args).InvokeAsync(new InvocationConfiguration()).ConfigureAwait(false);
+        try
+        {
+            return await root.Parse(args)
+                .InvokeAsync(new InvocationConfiguration())
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            await host.StopAsync().ConfigureAwait(false);
+        }
     }
 
     private static string MaskConnectionString(string? connectionString)

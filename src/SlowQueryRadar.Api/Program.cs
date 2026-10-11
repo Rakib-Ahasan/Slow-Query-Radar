@@ -23,7 +23,8 @@ builder.Services.AddMudServices();
 builder.Services.AddSingleton<QueryStateStore>();
 builder.Services.AddHttpClient<QueriesApiClient>(client =>
 {
-    client.BaseAddress = new Uri("/", UriKind.RelativeOrAbsolute);
+    var selfUrl = builder.Configuration["SelfUrl"] ?? "https://localhost:7001/";
+    client.BaseAddress = new Uri(selfUrl, UriKind.Absolute);
 });
 builder.Services.AddScoped<IQueriesApiClient>(provider =>
     provider.GetRequiredService<QueriesApiClient>());

@@ -30,14 +30,14 @@ public sealed class QueryStoreCollectorTests
     public async Task CollectTopSlowQueriesAsync_ImpactScoreMapsCorrectly()
     {
         var connection = new FakeQueryStoreConnection("READ_WRITE");
-        connection.AddQuery(1, "SELECT * FROM Users WHERE Id = @Id", 100, 5, 200, 5000, 200000);
+        connection.AddQuery(42, "SELECT * FROM Users WHERE Id = @Id", 100, 5, 200, 5000, 200000);
         var collector = CreateCollector(connection);
 
         var snapshots = await collector.CollectTopSlowQueriesAsync(
             10, TimeSpan.FromHours(24), CancellationToken.None);
 
         var snapshot = Assert.Single(snapshots);
-        Assert.Equal(1L, snapshot.QueryId);
+        Assert.Equal(42L, snapshot.QueryId);
         Assert.Equal("SELECT * FROM Users WHERE Id = @Id", snapshot.SqlText);
         Assert.Equal(100L, snapshot.ExecCount);
         Assert.Equal(5.0, snapshot.AvgDurationMs, 2);
@@ -47,10 +47,10 @@ public sealed class QueryStoreCollectorTests
         Assert.NotEmpty(snapshot.NormalizedSqlHash);
     }
 
-    private static QueryStoreCollector CreateCollector(FakeQueryStoreConnection connection) =>
+    internal static QueryStoreCollector CreateCollector(FakeQueryStoreConnection connection) =>
         new(Options.Create(new QueryStoreOptions()), () => connection);
 
-    private sealed class FakeQueryStoreConnection : DbConnection
+    internal sealed class FakeQueryStoreConnection : DbConnection
     {
         private readonly string _state;
         private readonly DataTable _rows = new();
@@ -66,13 +66,13 @@ public sealed class QueryStoreCollectorTests
             _rows.Columns.Add("TotalLogicalReads", typeof(long));
             _rows.Columns.Add("ImpactScore", typeof(double));
             _rows.Columns.Add("ExecutionPlanXml", typeof(string));
-            _rows.Columns.Add("LastExecutionUtc", typeof(DateTime));
+            _rows.Columns.Add("LastExecutionUtc", typeof(DateTimeOffset));
         }
 
         public void AddQuery(long queryId, string sqlText, long execCount, double avgDurationMs,
             double totalCpuMs, long logicalReads, double impactScore) =>
             _rows.Rows.Add(queryId, sqlText, execCount, avgDurationMs, totalCpuMs,
-                logicalReads, impactScore, DBNull.Value, DateTime.UtcNow);
+                logicalReads, impactScore, DBNull.Value, DateTimeOffset.UtcNow);
 
         private string _connectionString = string.Empty;
         public override string ConnectionString { get => _connectionString; [param: AllowNull] set => _connectionString = value ?? string.Empty; }
@@ -122,6 +122,21 @@ public sealed class QueryStoreCollectorTests
                 state.Columns.Add("actual_state_desc", typeof(string));
                 state.Rows.Add(_state);
                 return state.CreateDataReader();
+            }
+
+            if (_commandText.Contains("q.query_id = @queryId", StringComparison.OrdinalIgnoreCase))
+            {
+                var queryId = Convert.ToInt64(_parameters["queryId"].Value);
+                var filteredRows = _rows.Clone();
+                foreach (DataRow row in _rows.Rows)
+                {
+                    if (Convert.ToInt64(row["QueryId"]) == queryId)
+                    {
+                        filteredRows.ImportRow(row);
+                    }
+                }
+
+                return filteredRows.CreateDataReader();
             }
 
             return _rows.CreateDataReader();

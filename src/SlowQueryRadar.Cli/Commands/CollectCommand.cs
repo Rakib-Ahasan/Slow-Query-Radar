@@ -49,7 +49,7 @@ public static class CollectCommand
                     snapshot.AvgDurationMs.ToString("F2"),
                     snapshot.TotalCpuMs.ToString("F2"),
                     snapshot.ImpactScore.ToString("F2"),
-                    Truncate(snapshot.SqlText, 80));
+                    Markup.Escape(Truncate(snapshot.SqlText, 80)));
             }
 
             AnsiConsole.Write(table);
