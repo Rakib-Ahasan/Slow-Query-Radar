@@ -24,33 +24,33 @@ public class Program
     public static async Task<int> Main(string[] args)
     {
         Environment.SetEnvironmentVariable("DOTNET_ENVIRONMENT", "Development");
-        var builder = Host.CreateApplicationBuilder(args);
+        using var host = Host.CreateDefaultBuilder(args)
+            .ConfigureLogging(logging => logging.SetMinimumLevel(LogLevel.Debug))
+            .ConfigureAppConfiguration((context, configuration) =>
+            {
+                configuration.Sources.Clear();
+                configuration.SetBasePath(AppContext.BaseDirectory);
+                configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: false);
+                configuration.AddJsonFile($"appsettings.{context.HostingEnvironment.EnvironmentName}.json",
+                    optional: true, reloadOnChange: false);
+                configuration.AddUserSecrets<Program>(optional: true);
+                configuration.AddEnvironmentVariables();
+            })
+            .ConfigureServices((context, services) =>
+            {
+                services.AddSlowQueryRadarCollector(context.Configuration);
+                services.AddSlowQueryRadarAnalyzer();
+                services.AddSlowQueryRadarSuggestions(context.Configuration);
+                services.AddSlowQueryRadarBenchmark(context.Configuration);
+            })
+            .Build();
 
-        builder.Configuration.Sources.Clear();
-        builder.Configuration
-            .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
-            .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: false);
-
-        if (builder.Environment.IsDevelopment())
-        {
-            builder.Logging.SetMinimumLevel(LogLevel.Debug);
-            builder.Configuration.AddUserSecrets(UserSecretsId);
-        }
-
-        builder.Configuration.AddEnvironmentVariables();
-        builder.Services.AddSlowQueryRadarCollector(builder.Configuration);
-        builder.Services.AddSlowQueryRadarAnalyzer();
-        builder.Services.AddSlowQueryRadarSuggestions(builder.Configuration);
-        builder.Services.AddSlowQueryRadarBenchmark(builder.Configuration);
-
-        using var host = builder.Build();
         if (host.Services.GetRequiredService<IHostEnvironment>().IsDevelopment())
         {
             var logger = host.Services.GetRequiredService<ILogger<Program>>();
             logger.LogDebug(
                 "Loaded QueryStore connection string: {ConnectionString}",
-                MaskConnectionString(builder.Configuration["QueryStore:ConnectionString"]));
+                MaskConnectionString(host.Services.GetRequiredService<IConfiguration>()["QueryStore:ConnectionString"]));
         }
 
         var root = new RootCommand("Slow Query Radar CLI");
