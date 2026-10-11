@@ -11,6 +11,8 @@ using Microsoft.Extensions.Options;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using SlowQueryRadar.Analyzer;
 using SlowQueryRadar.Core.Models;
+using SlowQueryRadar.Core.Sql;
+using System.Reflection;
 
 namespace SlowQueryRadar.Benchmark;
 
@@ -44,8 +46,9 @@ public sealed class QueryBenchmarker
     public static void ValidateSql(string sql)
     {
         ArgumentNullException.ThrowIfNull(sql);
+        var normalized = QueryStoreSqlNormalizer.Normalize(sql);
         var parser = new TSql170Parser(initialQuotedIdentifiers: true);
-        using var reader = new StringReader(sql);
+        using var reader = new StringReader(normalized.Sql);
         var fragment = parser.Parse(reader, out IList<ParseError> errors);
         if (errors.Count > 0)
         {
@@ -90,7 +93,38 @@ public sealed class QueryBenchmarker
         int measuredRuns,
         CancellationToken ct)
     {
-        ValidateSql(sql);
+        return await RunCoreAsync(sql, parameters, null, warmupRuns, measuredRuns, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Runs a benchmark with optional named parameter overrides.</summary>
+    /// <param name="sql">The SQL text.</param>
+    /// <param name="parameterOverrides">Optional parameter values keyed by parameter name.</param>
+    /// <param name="warmupRuns">The number of unmeasured warmup executions.</param>
+    /// <param name="measuredRuns">The number of measured executions.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Aggregated benchmark metrics.</returns>
+    public async Task<BenchmarkResult> RunAsync(
+        string sql,
+        IReadOnlyDictionary<string, object?>? parameterOverrides,
+        int warmupRuns,
+        int measuredRuns,
+        CancellationToken ct)
+    {
+        return await RunCoreAsync(sql, null, parameterOverrides, warmupRuns, measuredRuns, ct).ConfigureAwait(false);
+    }
+
+    private async Task<BenchmarkResult> RunCoreAsync(
+        string sql,
+        object? parameters,
+        IReadOnlyDictionary<string, object?>? parameterOverrides,
+        int warmupRuns,
+        int measuredRuns,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(sql);
+        var normalized = QueryStoreSqlNormalizer.Normalize(sql);
+        ValidateSql(normalized.Sql);
+        var boundParameters = CreateParameters(normalized.Parameters, parameters, parameterOverrides);
         ArgumentOutOfRangeException.ThrowIfNegative(warmupRuns);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(measuredRuns);
 
@@ -112,8 +146,8 @@ public sealed class QueryBenchmarker
             var before = await ReadSessionMetricsAsync(connection, ct).ConfigureAwait(false);
             var stopwatch = Stopwatch.StartNew();
             var rows = (await connection.QueryAsync(new CommandDefinition(
-                sql,
-                parameters,
+                normalized.Sql,
+                boundParameters,
                 cancellationToken: ct)).ConfigureAwait(false)).AsList();
             stopwatch.Stop();
             var after = await ReadSessionMetricsAsync(connection, ct).ConfigureAwait(false);
@@ -130,7 +164,7 @@ public sealed class QueryBenchmarker
 
         durations.Sort();
         return new BenchmarkResult(
-            ComputeSqlHash(sql),
+            ComputeSqlHash(normalized.Sql),
             Percentile(durations, 0.50),
             Percentile(durations, 0.95),
             durations[^1],
@@ -141,6 +175,96 @@ public sealed class QueryBenchmarker
         {
             FirstRowChecksum = firstRowChecksum
         };
+    }
+
+    private static object? CreateParameters(
+        IReadOnlyList<QueryStoreSqlNormalizer.ParameterDecl> declarations,
+        object? parameters,
+        IReadOnlyDictionary<string, object?>? parameterOverrides)
+    {
+        if (declarations.Count == 0 && parameterOverrides is null)
+        {
+            return parameters;
+        }
+
+        var dynamicParameters = new DynamicParameters();
+        if (parameters is not null)
+        {
+            dynamicParameters.AddDynamicParams(parameters);
+        }
+
+        var overrides = parameterOverrides is null
+            ? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            : parameterOverrides.ToDictionary(
+                pair => TrimParameterPrefix(pair.Key),
+                pair => pair.Value,
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (var declaration in declarations)
+        {
+            var key = TrimParameterPrefix(declaration.Name);
+            if (overrides.TryGetValue(key, out var overrideValue))
+            {
+                dynamicParameters.Add(declaration.Name, overrideValue);
+            }
+            else if (!dynamicParameters.ParameterNames.Any(name =>
+                         string.Equals(TrimParameterPrefix(name), key, StringComparison.OrdinalIgnoreCase)))
+            {
+                dynamicParameters.Add(declaration.Name, DefaultValue(declaration.Type));
+            }
+        }
+
+        return dynamicParameters;
+    }
+
+    private static string TrimParameterPrefix(string name) => name.TrimStart('@');
+
+    private static object DefaultValue(string type)
+    {
+        var normalizedType = type.Trim().ToLowerInvariant();
+        if (normalizedType.StartsWith("smallint", StringComparison.Ordinal)
+            || normalizedType.StartsWith("int", StringComparison.Ordinal)
+            || normalizedType.StartsWith("bigint", StringComparison.Ordinal)
+            || normalizedType.StartsWith("tinyint", StringComparison.Ordinal))
+        {
+            return 1;
+        }
+
+        if (normalizedType.StartsWith("decimal", StringComparison.Ordinal)
+            || normalizedType.StartsWith("numeric", StringComparison.Ordinal)
+            || normalizedType.StartsWith("float", StringComparison.Ordinal)
+            || normalizedType.StartsWith("real", StringComparison.Ordinal)
+            || normalizedType.StartsWith("money", StringComparison.Ordinal)
+            || normalizedType.StartsWith("smallmoney", StringComparison.Ordinal))
+        {
+            return 1.0;
+        }
+
+        if (normalizedType.StartsWith("bit", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (normalizedType.StartsWith("varchar", StringComparison.Ordinal)
+            || normalizedType.StartsWith("nvarchar", StringComparison.Ordinal)
+            || normalizedType.StartsWith("char", StringComparison.Ordinal)
+            || normalizedType.StartsWith("nchar", StringComparison.Ordinal))
+        {
+            return "test";
+        }
+
+        if (normalizedType.StartsWith("date", StringComparison.Ordinal)
+            || normalizedType.StartsWith("datetime", StringComparison.Ordinal))
+        {
+            return new DateTime(2024, 1, 1);
+        }
+
+        if (normalizedType.StartsWith("uniqueidentifier", StringComparison.Ordinal))
+        {
+            return Guid.Empty;
+        }
+
+        return DBNull.Value;
     }
 
     private static async Task<SessionMetrics> ReadSessionMetricsAsync(SqlConnection connection, CancellationToken ct)

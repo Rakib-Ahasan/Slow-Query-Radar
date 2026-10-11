@@ -12,7 +12,10 @@
 
 @if (_loading)
 {
-    <MudProgressCircular Indeterminate="true" />
+    <MudAlert Severity="MudSeverity.Info">
+        <MudProgressCircular Class="mr-2" Indeterminate="true" Size="Size.Small" />
+        Loading query @QueryId...
+    </MudAlert>
 }
 else if (_error is not null)
 {
@@ -30,7 +33,7 @@ else if (_notFound)
 }
 else if (_snapshot is null)
 {
-    <MudProgressCircular Indeterminate="true" />
+    <MudAlert Severity="MudSeverity.Info">Loading snapshot...</MudAlert>
 }
 else
 {
@@ -94,6 +97,10 @@ else
                 <MudText Class="mt-4">P50: @_benchmark.DurationP50Ms.ToString("F2") ms | Logical reads: @_benchmark.LogicalReads</MudText>
                 <MudChart ChartType="ChartType.Bar" ChartSeries="_chartSeries" ChartLabels="_chartLabels" Width="100%" Height="300px" />
             }
+            @if (_benchmarkError is not null)
+            {
+                <MudAlert Class="mt-4" Severity="MudSeverity.Warning">@_benchmarkError</MudAlert>
+            }
         </MudTabPanel>
     </MudTabs>
 }
@@ -108,6 +115,7 @@ else
     private int _warmupRuns = 1;
     private int _measuredRuns = 5;
     private bool _benchmarking;
+    private string? _benchmarkError;
     private bool _loading;
     private string? _error;
     private bool _notFound;
@@ -130,6 +138,10 @@ else
             using var cancellationSource = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             var ct = cancellationSource.Token;
             var snapshot = await Collector.GetByQueryIdAsync(QueryId, ct);
+            Logger.LogInformation(
+                "QueryDetail: GetByQueryIdAsync returned snapshot={IsNull}, SqlTextLength={Length}",
+                snapshot is null,
+                snapshot?.SqlText?.Length ?? 0);
             if (snapshot is null)
             {
                 _notFound = true;
@@ -137,7 +149,11 @@ else
             }
 
             var analysis = await Analyzer.AnalyzeAsync(snapshot, Array.Empty<DapperLogEntry>(), ct);
+            Logger.LogInformation("QueryDetail: Analyzer returned {Count} findings", analysis.Findings.Count);
             var suggestion = await Suggester.BuildSuggestionAsync(analysis, snapshot.SqlText, ct);
+            Logger.LogInformation(
+                "QueryDetail: Suggestion deterministic length={Length}",
+                suggestion.DeterministicFix?.Length ?? 0);
             _snapshot = snapshot;
             _analysis = analysis;
             _suggestion = suggestion;
@@ -169,6 +185,7 @@ else
     private async Task RunBenchmarkAsync()
     {
         _benchmarking = true;
+        _benchmarkError = null;
         try
         {
             if (_snapshot is null)
@@ -178,7 +195,7 @@ else
 
             var benchmark = await Benchmarker.RunAsync(
                 _snapshot.SqlText,
-                null,
+                (object?)null,
                 _warmupRuns,
                 _measuredRuns,
                 CancellationToken.None);
@@ -190,6 +207,18 @@ else
                     new ChartSeries<double> { Name = "Before/Current", Data = new ChartData<double>(new[] { _benchmark.DurationP50Ms, (double)_benchmark.LogicalReads }) }
                 ];
             }
+        }
+        catch (UnsafeQueryException exception)
+        {
+            _benchmarkError = $"Cannot benchmark this query: {exception.Message}";
+        }
+        catch (Microsoft.Data.SqlClient.SqlException exception)
+        {
+            _benchmarkError = $"Database error: {exception.Message}";
+        }
+        catch (Exception exception)
+        {
+            _benchmarkError = $"Unexpected error: {exception.Message}";
         }
         finally
         {

@@ -2,18 +2,14 @@
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using SlowQueryRadar.Core.Abstractions;
 using SlowQueryRadar.Core.Models;
+using SlowQueryRadar.Core.Sql;
 using SlowQueryRadar.Analyzer.Rules;
-using System.Text.RegularExpressions;
 
 namespace SlowQueryRadar.Analyzer;
 
 /// <summary>Analyzes SQL text, execution plans, and recent profiler entries.</summary>
 public sealed class SqlAnalyzer
 {
-    private static readonly Regex ParameterPrefixRegex = new(
-        @"^\s*\((?<parameters>.*?)\)\s*(?=(?:SELECT|WITH|INSERT|UPDATE|DELETE|MERGE|EXEC|DECLARE)\b)",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Singleline);
-
     private readonly IReadOnlyList<ISqlRule> _rules;
 
     /// <summary>Initializes an analyzer with the configured SQL rules.</summary>
@@ -31,7 +27,14 @@ public sealed class SqlAnalyzer
     {
         ArgumentNullException.ThrowIfNull(sql);
         var parser = new TSql170Parser(initialQuotedIdentifiers: true);
-        var transformedSql = TransformParameterPrefix(sql);
+        var normalized = QueryStoreSqlNormalizer.Normalize(sql);
+        var transformedSql = normalized.Parameters.Count == 0
+            ? normalized.Sql
+            : string.Join(
+                Environment.NewLine,
+                normalized.Parameters.Select(parameter => $"DECLARE {parameter.Name} {parameter.Type};"))
+              + Environment.NewLine
+              + normalized.Sql;
         using var reader = new StringReader(transformedSql);
         var fragment = parser.Parse(reader, out IList<ParseError> errors);
         if (errors.Count > 0)
@@ -48,30 +51,6 @@ public sealed class SqlAnalyzer
         }
 
         return [fragment];
-    }
-
-    private static string TransformParameterPrefix(string sql)
-    {
-        var match = ParameterPrefixRegex.Match(sql);
-        if (!match.Success || string.IsNullOrWhiteSpace(match.Groups["parameters"].Value))
-        {
-            return sql;
-        }
-
-        var declarations = match.Groups["parameters"].Value
-            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .Select(parameter => parameter.Trim())
-            .ToArray();
-        if (declarations.Length == 0 || declarations.Any(parameter =>
-                !Regex.IsMatch(parameter, @"^@\w+\s+.+$", RegexOptions.CultureInvariant)))
-        {
-            return sql;
-        }
-
-        var declareBlock = string.Join(
-            Environment.NewLine,
-            declarations.Select(parameter => $"DECLARE {parameter};"));
-        return declareBlock + Environment.NewLine + sql[match.Length..];
     }
 
     /// <summary>Analyzes a snapshot synchronously using all configured rules.</summary>
