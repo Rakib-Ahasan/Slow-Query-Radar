@@ -63,7 +63,7 @@
     private bool _loading;
     private string? _error;
 
-    private int HighPriorityCount => _queries.Count(query => query.ImpactScore > 0);
+    private int HighPriorityCount => _queries.Count(query => query.ImpactScore >= 1_000_000);
 
     private static string GetSeverity(double impact) => impact switch
     {

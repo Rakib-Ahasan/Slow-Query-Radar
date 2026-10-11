@@ -6,6 +6,8 @@ Slow Query Radar collects, analyzes, and benchmarks slow SQL queries.
 
 1. Copy `appsettings.Shared.template.json` to `appsettings.Shared.json` at the
    repository root.
+   The template is valid JSON; the copied `appsettings.Shared.json` is
+   gitignored and must never be committed.
 2. Fill in your local connection strings:
    - `QueryStore:ConnectionString`
    - `Benchmark:ConnectionString`
