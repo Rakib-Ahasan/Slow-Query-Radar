@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SlowQueryRadar.Analyzer/SlowQueryRadar.Analyzer.csproj" />
+    <Project Path="src/SlowQueryRadar.Api/SlowQueryRadar.Api.csproj" />
+    <Project Path="src/SlowQueryRadar.Benchmark/SlowQueryRadar.Benchmark.csproj" />
+    <Project Path="src/SlowQueryRadar.Cli/SlowQueryRadar.Cli.csproj" />
+    <Project Path="src/SlowQueryRadar.Collector/SlowQueryRadar.Collector.csproj" />
+    <Project Path="src/SlowQueryRadar.Core/SlowQueryRadar.Core.csproj" />
+    <Project Path="src/SlowQueryRadar.Profiler/SlowQueryRadar.Profiler.csproj" />
+    <Project Path="src/SlowQueryRadar.Suggestions/SlowQueryRadar.Suggestions.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SlowQueryRadar.Tests.Integration/SlowQueryRadar.Tests.Integration.csproj" />
+    <Project Path="tests/SlowQueryRadar.Tests.Unit/SlowQueryRadar.Tests.Unit.csproj" />
+  </Folder>
+</Solution>

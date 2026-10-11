@@ -1,0 +1,52 @@
+@page "/reports/weekly"
+@inject IQueriesApiClient ApiClient
+
+<PageTitle>Weekly Report</PageTitle>
+
+<div class="print-report">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4 no-print">
+        <MudText Typo="Typo.h4">Weekly report</MudText>
+        <MudButton Variant="Variant.Filled" OnClick="Print">Download PDF</MudButton>
+    </MudStack>
+
+    <MudText Typo="Typo.h4" Class="print-only">Slow Query Radar — Weekly Report</MudText>
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="4"><MudCard><MudCardContent><MudText Typo="Typo.subtitle2">Total queries analyzed</MudText><MudText Typo="Typo.h4">@_queries.Count</MudText></MudCardContent></MudCard></MudItem>
+        <MudItem xs="12" sm="4"><MudCard><MudCardContent><MudText Typo="Typo.subtitle2">High findings</MudText><MudText Typo="Typo.h4">0</MudText></MudCardContent></MudCard></MudItem>
+        <MudItem xs="12" sm="4"><MudCard><MudCardContent><MudText Typo="Typo.subtitle2">Validated fixes applied</MudText><MudText Typo="Typo.h4">0</MudText></MudCardContent></MudCard></MudItem>
+    </MudGrid>
+
+    <MudText Typo="Typo.h6" Class="mb-2">Top 10 slow queries</MudText>
+    <MudTable Items="_queries.Take(10)" Dense="true" Hover="true">
+        <HeaderContent><MudTh>QueryId</MudTh><MudTh>Average ms</MudTh><MudTh>Total CPU ms</MudTh><MudTh>Impact</MudTh></HeaderContent>
+        <RowTemplate><MudTd>@context.QueryId</MudTd><MudTd>@context.AvgDurationMs.ToString("F2")</MudTd><MudTd>@context.TotalCpuMs.ToString("F2")</MudTd><MudTd>@context.ImpactScore.ToString("F2")</MudTd></RowTemplate>
+    </MudTable>
+
+    <MudText Typo="Typo.h6" Class="mt-6 mb-2">Findings by severity</MudText>
+    <MudAlert Severity="Severity.Info">Run analysis from the query detail page to populate findings.</MudAlert>
+
+    <MudText Typo="Typo.h6" Class="mt-6 mb-2">Validated fixes</MudText>
+    <MudAlert Severity="Severity.Info">No validated benchmark fixes are available in the current report state.</MudAlert>
+</div>
+
+@code {
+    [Inject] private IJSRuntime Js { get; set; } = default!;
+    private IReadOnlyList<SlowQueryDto> _queries = Array.Empty<SlowQueryDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _queries = await ApiClient.GetTopAsync(10, 168, CancellationToken.None);
+    }
+
+    private Task Print() => Js.InvokeVoidAsync("window.print").AsTask();
+}
+
+<style>
+    .print-only { display: none; }
+    @@media print {
+        .no-print { display: none !important; }
+        .print-only { display: block; }
+        .mud-appbar, .mud-drawer { display: none !important; }
+        body { background: white; }
+    }
+</style>

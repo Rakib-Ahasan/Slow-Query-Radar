@@ -1,0 +1,21 @@
+<!-- tests/SlowQueryRadar.Tests.Unit/Fixtures/Plans/implicit-conversion.sqlplan -->
+<ShowPlanXML xmlns="http://schemas.microsoft.com/sqlserver/2004/07/showplan" Version="1.0" Build="15.0.0000.0">
+  <BatchSequence>
+	<Batch>
+	  <Statements>
+		<StmtSimple StatementText="SELECT * FROM dbo.Users WHERE Id = @Id" StatementType="SELECT">
+		  <QueryPlan>
+			<RelOp NodeId="0" PhysicalOp="Index Seek" LogicalOp="Index Seek" EstimateRows="1" EstimateCPU="0.001">
+			  <IndexScan>
+				<Object Database="[RadarDb]" Schema="[dbo]" Table="[Users]" Index="[IX_Users_Id]" />
+				<Predicate>
+				  <ScalarOperator ScalarString="CONVERT_IMPLICIT(int,[dbo].[Users].[Id],0)=[@Id]" />
+				</Predicate>
+			  </IndexScan>
+			</RelOp>
+		  </QueryPlan>
+		</StmtSimple>
+	  </Statements>
+	</Batch>
+  </BatchSequence>
+</ShowPlanXML>

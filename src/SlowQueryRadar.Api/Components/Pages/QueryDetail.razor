@@ -1,0 +1,134 @@
+@page "/query/{QueryId:long}"
+@inject IQueriesApiClient ApiClient
+@inject IJSRuntime Js
+
+<PageTitle>Query @QueryId</PageTitle>
+
+@if (_snapshot is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudText Typo="Typo.h4" Class="mb-4">Query @QueryId</MudText>
+    <MudTabs Rounded="true" Elevation="1">
+        <MudTabPanel Text="SQL">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.h6">SQL text</MudText>
+                <MudButton Variant="Variant.Outlined" OnClick="CopySqlAsync">Copy SQL</MudButton>
+            </MudStack>
+            <pre class="sql-block">@_snapshot.SqlText</pre>
+        </MudTabPanel>
+        <MudTabPanel Text="Findings">
+            @if (_analysis is null || _analysis.Findings.Count == 0)
+            {
+                <MudText>No findings are available for this query.</MudText>
+            }
+            else
+            {
+                <MudList T="FindingDto">
+                    @foreach (var finding in _analysis.Findings)
+                    {
+                        <MudListItem>
+                            <MudChip Color="SeverityColor(finding.Severity)" Size="Size.Small">@finding.Severity</MudChip>
+                            <MudText Class="ml-2">@finding.Message</MudText>
+                            @if (!string.IsNullOrWhiteSpace(finding.Evidence))
+                            {
+                                <MudText Typo="Typo.caption">@finding.Evidence</MudText>
+                            }
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </MudTabPanel>
+        <MudTabPanel Text="Suggested fix">
+            @if (_analysis?.Suggestion is null)
+            {
+                <MudText>No suggestion is available.</MudText>
+            }
+            else
+            {
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                    <MudText Typo="Typo.h6">Deterministic fix</MudText>
+                    <MudButton Variant="Variant.Outlined" OnClick="CopyFixAsync">Copy fix</MudButton>
+                </MudStack>
+                <pre class="sql-block">@_analysis.Suggestion.DeterministicFix</pre>
+                @if (!string.IsNullOrWhiteSpace(_analysis.Suggestion.AiExplanation))
+                {
+                    <MudAlert Severity="Severity.Info">@_analysis.Suggestion.AiExplanation</MudAlert>
+                }
+            }
+        </MudTabPanel>
+        <MudTabPanel Text="Benchmark">
+            <MudGrid>
+                <MudItem xs="12" sm="6"><MudNumericField @bind-Value="_warmupRuns" Label="Warmup runs" Min="0" /></MudItem>
+                <MudItem xs="12" sm="6"><MudNumericField @bind-Value="_measuredRuns" Label="Measured runs" Min="1" /></MudItem>
+            </MudGrid>
+            <MudButton Class="mt-4" Variant="Variant.Filled" Color="Color.Primary" OnClick="RunBenchmarkAsync" Disabled="@_benchmarking">Run benchmark</MudButton>
+            @if (_benchmark is not null)
+            {
+                <MudText Class="mt-4">P50: @_benchmark.DurationP50Ms.ToString("F2") ms | Logical reads: @_benchmark.LogicalReads</MudText>
+                <MudChart ChartType="ChartType.Bar" ChartSeries="_chartSeries" ChartLabels="_chartLabels" Width="100%" Height="300px" />
+            }
+        </MudTabPanel>
+    </MudTabs>
+}
+
+@code {
+    [Parameter] public long QueryId { get; set; }
+
+    private SlowQueryDto? _snapshot;
+    private AnalyzeResponseDto? _analysis;
+    private BenchmarkResultDto? _benchmark;
+    private int _warmupRuns = 1;
+    private int _measuredRuns = 5;
+    private bool _benchmarking;
+    private readonly string[] _chartLabels = ["Duration P50 (ms)", "Logical reads"];
+    private List<ChartSeries<double>> _chartSeries = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _snapshot = await ApiClient.GetAsync(QueryId, CancellationToken.None);
+        if (_snapshot is not null)
+        {
+            _analysis = await ApiClient.AnalyzeAsync(
+                new AnalyzeRequestDto(_snapshot.SqlText, 20, 24),
+                CancellationToken.None);
+        }
+    }
+
+    private async Task RunBenchmarkAsync()
+    {
+        _benchmarking = true;
+        try
+        {
+            _benchmark = await ApiClient.BenchmarkAsync(
+                QueryId,
+                new BenchmarkRequestDto(_warmupRuns, _measuredRuns),
+                CancellationToken.None);
+            if (_benchmark is not null)
+            {
+                _chartSeries =
+                [
+                    new ChartSeries<double> { Name = "Before/Current", Data = new ChartData<double>(new[] { _benchmark.DurationP50Ms, (double)_benchmark.LogicalReads }) }
+                ];
+            }
+        }
+        finally
+        {
+            _benchmarking = false;
+        }
+    }
+
+    private Task CopySqlAsync() => Js.InvokeVoidAsync("navigator.clipboard.writeText", _snapshot?.SqlText ?? string.Empty).AsTask();
+
+    private Task CopyFixAsync() => Js.InvokeVoidAsync("navigator.clipboard.writeText", _analysis?.Suggestion?.DeterministicFix ?? string.Empty).AsTask();
+
+    private static Color SeverityColor(string severity) => severity switch
+    {
+        "Critical" => Color.Error,
+        "High" => Color.Error,
+        "Medium" => Color.Warning,
+        _ => Color.Info
+    };
+}

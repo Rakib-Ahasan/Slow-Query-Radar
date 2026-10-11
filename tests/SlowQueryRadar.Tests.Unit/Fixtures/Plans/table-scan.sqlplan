@@ -1,0 +1,18 @@
+<!-- tests/SlowQueryRadar.Tests.Unit/Fixtures/Plans/table-scan.sqlplan -->
+<ShowPlanXML xmlns="http://schemas.microsoft.com/sqlserver/2004/07/showplan" Version="1.0" Build="15.0.0000.0">
+  <BatchSequence>
+	<Batch>
+	  <Statements>
+		<StmtSimple StatementText="SELECT * FROM dbo.Users" StatementType="SELECT">
+		  <QueryPlan>
+			<RelOp NodeId="0" PhysicalOp="Table Scan" LogicalOp="Table Scan" EstimateRows="15000" EstimateCPU="0.2">
+			  <TableScan>
+				<Object Database="[RadarDb]" Schema="[dbo]" Table="[Users]" />
+			  </TableScan>
+			</RelOp>
+		  </QueryPlan>
+		</StmtSimple>
+	  </Statements>
+	</Batch>
+  </BatchSequence>
+</ShowPlanXML>

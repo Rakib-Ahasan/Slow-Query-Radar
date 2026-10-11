@@ -1,0 +1,96 @@
+@page "/"
+@implements IAsyncDisposable
+@inject IQueriesApiClient ApiClient
+@inject NavigationManager Navigation
+
+<PageTitle>Slow Query Radar</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Slow Query Radar</MudText>
+
+<MudGrid Class="mb-4">
+    <MudItem xs="12" sm="6" md="3"><MudCard><MudCardContent><MudText Typo="Typo.subtitle2">Queries Reviewed</MudText><MudText Typo="Typo.h4">@_queries.Count</MudText></MudCardContent></MudCard></MudItem>
+    <MudItem xs="12" sm="6" md="3"><MudCard><MudCardContent><MudText Typo="Typo.subtitle2">High-Priority Findings</MudText><MudText Typo="Typo.h4">@HighPriorityCount</MudText></MudCardContent></MudCard></MudItem>
+    <MudItem xs="12" sm="6" md="3"><MudCard><MudCardContent><MudText Typo="Typo.subtitle2">Validated Optimizations</MudText><MudText Typo="Typo.h4">0</MudText></MudCardContent></MudCard></MudItem>
+    <MudItem xs="12" sm="6" md="3"><MudCard><MudCardContent><MudText Typo="Typo.subtitle2">Estimated CPU Saved %</MudText><MudText Typo="Typo.h4">0.00%</MudText></MudCardContent></MudCard></MudItem>
+</MudGrid>
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+}
+
+<MudTable T="SlowQueryDto" Items="_queries" Hover="true" Dense="true" Loading="_loading" OnRowClick="@HandleRowClick">
+    <HeaderContent>
+        <MudTh>QueryId</MudTh>
+        <MudTh>Exec Count</MudTh>
+        <MudTh>Avg ms</MudTh>
+        <MudTh>Total CPU ms</MudTh>
+        <MudTh>Impact</MudTh>
+        <MudTh>Severity</MudTh>
+        <MudTh>Action</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="QueryId">@context.QueryId</MudTd>
+        <MudTd DataLabel="Exec Count">@context.ExecCount</MudTd>
+        <MudTd DataLabel="Avg ms">@context.AvgDurationMs.ToString("F2")</MudTd>
+        <MudTd DataLabel="Total CPU ms">@context.TotalCpuMs.ToString("F2")</MudTd>
+        <MudTd DataLabel="Impact">@context.ImpactScore.ToString("F2")</MudTd>
+        <MudTd DataLabel="Severity"><MudChip T="string" Color="@(context.ImpactScore > 0 ? Color.Error : Color.Default)" Size="Size.Small">@(context.ImpactScore > 0 ? "High" : "Low")</MudChip></MudTd>
+        <MudTd DataLabel="Action"><MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => OpenQuery(context.QueryId))">Open</MudButton></MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    private IReadOnlyList<SlowQueryDto> _queries = Array.Empty<SlowQueryDto>();
+    private Timer? _refreshTimer;
+    private bool _loading;
+    private string? _error;
+
+    private int HighPriorityCount => _queries.Count(query => query.ImpactScore > 0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        _refreshTimer = new Timer(_ => _ = InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        }), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _queries = await ApiClient.GetTopAsync(20, 24, CancellationToken.None);
+            _error = null;
+        }
+        catch (Exception exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void HandleRowClick(TableRowClickEventArgs<SlowQueryDto> args)
+    {
+        if (args.Item is not null)
+        {
+            OpenQuery(args.Item.QueryId);
+        }
+    }
+
+    private void OpenQuery(long queryId) => Navigation.NavigateTo($"/query/{queryId}");
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_refreshTimer is not null)
+        {
+            await _refreshTimer.DisposeAsync();
+        }
+    }
+}

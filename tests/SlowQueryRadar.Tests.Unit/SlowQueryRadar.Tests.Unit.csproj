@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Moq" Version="4.21.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Fixtures\Plans\*.sqlplan" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SlowQueryRadar.Core\SlowQueryRadar.Core.csproj" />
+    <ProjectReference Include="..\..\src\SlowQueryRadar.Collector\SlowQueryRadar.Collector.csproj" />
+    <ProjectReference Include="..\..\src\SlowQueryRadar.Profiler\SlowQueryRadar.Profiler.csproj" />
+    <ProjectReference Include="..\..\src\SlowQueryRadar.Analyzer\SlowQueryRadar.Analyzer.csproj" />
+    <ProjectReference Include="..\..\src\SlowQueryRadar.Suggestions\SlowQueryRadar.Suggestions.csproj" />
+    <ProjectReference Include="..\..\src\SlowQueryRadar.Benchmark\SlowQueryRadar.Benchmark.csproj" />
+    <ProjectReference Include="..\..\src\SlowQueryRadar.Cli\SlowQueryRadar.Cli.csproj" />
+  </ItemGroup>
+
+</Project>
