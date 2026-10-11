@@ -6,14 +6,15 @@
 <div class="print-report">
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4 no-print">
         <MudText Typo="Typo.h4">Weekly report</MudText>
-        <MudButton Variant="Variant.Filled" OnClick="Print">Download PDF</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="Print">Download PDF</MudButton>
     </MudStack>
 
     <MudText Typo="Typo.h4" Class="print-only">Slow Query Radar — Weekly Report</MudText>
     <MudGrid Class="mb-4">
-        <MudItem xs="12" sm="4"><MudCard><MudCardContent><MudText Typo="Typo.subtitle2">Total queries analyzed</MudText><MudText Typo="Typo.h4">@_queries.Count</MudText></MudCardContent></MudCard></MudItem>
-        <MudItem xs="12" sm="4"><MudCard><MudCardContent><MudText Typo="Typo.subtitle2">High findings</MudText><MudText Typo="Typo.h4">0</MudText></MudCardContent></MudCard></MudItem>
-        <MudItem xs="12" sm="4"><MudCard><MudCardContent><MudText Typo="Typo.subtitle2">Validated fixes applied</MudText><MudText Typo="Typo.h4">0</MudText></MudCardContent></MudCard></MudItem>
+        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Primary"><MudIcon Icon="@Icons.Material.Filled.Search" /></MudAvatar><MudStack><MudText Typo="Typo.caption">Queries Reviewed</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">@_queries.Count</MudText></MudStack></MudStack></MudPaper></MudItem>
+        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Error"><MudIcon Icon="@Icons.Material.Filled.Warning" /></MudAvatar><MudStack><MudText Typo="Typo.caption">High-Priority</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">@HighPriorityCount</MudText></MudStack></MudStack></MudPaper></MudItem>
+        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Success"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" /></MudAvatar><MudStack><MudText Typo="Typo.caption">Validated Fixes</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">0</MudText></MudStack></MudStack></MudPaper></MudItem>
+        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Info"><MudIcon Icon="@Icons.Material.Filled.Speed" /></MudAvatar><MudStack><MudText Typo="Typo.caption">CPU Saved %</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">0.00%</MudText></MudStack></MudStack></MudPaper></MudItem>
     </MudGrid>
 
     @if (_error is not null)
@@ -24,11 +25,11 @@
     <MudText Typo="Typo.h6" Class="mb-2">Top 10 slow queries</MudText>
     <MudTable Items="_queries.Take(10)" Dense="true" Hover="true">
         <HeaderContent><MudTh>QueryId</MudTh><MudTh>Average ms</MudTh><MudTh>Total CPU ms</MudTh><MudTh>Impact</MudTh></HeaderContent>
-        <RowTemplate><MudTd>@context.QueryId</MudTd><MudTd>@context.AvgDurationMs.ToString("F2")</MudTd><MudTd>@context.TotalCpuMs.ToString("F2")</MudTd><MudTd>@context.ImpactScore.ToString("F2")</MudTd></RowTemplate>
+        <RowTemplate><MudTd>@context.QueryId</MudTd><MudTd>@context.AvgDurationMs.ToString("F2")</MudTd><MudTd>@context.TotalCpuMs.ToString("F2")</MudTd><MudTd><MudText Typo="Typo.caption">@context.ImpactScore.ToString("F2")</MudText><MudProgressLinear Color="GetSeverityColor(context.ImpactScore)" Value="GetImpactPercent(context.ImpactScore)" /></MudTd></RowTemplate>
     </MudTable>
 
     <MudText Typo="Typo.h6" Class="mt-6 mb-2">Findings by severity</MudText>
-    <MudAlert Severity="MudSeverity.Info">Run analysis from the query detail page to populate findings.</MudAlert>
+    <MudChart ChartType="ChartType.Bar" ChartSeries="_severitySeries" ChartLabels="_severityLabels" Height="280px" />
 
     <MudText Typo="Typo.h6" Class="mt-6 mb-2">Validated fixes</MudText>
     <MudAlert Severity="MudSeverity.Info">No validated benchmark fixes are available in the current report state.</MudAlert>
@@ -38,6 +39,29 @@
     [Inject] private IJSRuntime Js { get; set; } = default!;
     private IReadOnlyList<SlowQueryDto> _queries = Array.Empty<SlowQueryDto>();
     private string? _error;
+    private readonly string[] _severityLabels = ["High", "Medium", "Low", "Info"];
+    private readonly List<ChartSeries<double>> _severitySeries = [new() { Name = "Findings", Data = new ChartData<double>(new double[] { 0, 0, 0, 0 }) }];
+
+    private int HighPriorityCount => _queries.Count(query => query.ImpactScore >= 1_000_000);
+    private double MaxImpact => _queries.Count == 0 ? 0 : _queries.Max(query => query.ImpactScore);
+
+    private double GetImpactPercent(double impact) => MaxImpact == 0 ? 0 : impact / MaxImpact * 100;
+
+    private static string GetSeverity(double impact) => impact switch
+    {
+        >= 1_000_000 => "High",
+        >= 100_000 => "Medium",
+        >= 10_000 => "Low",
+        _ => "Info"
+    };
+
+    private static Color GetSeverityColor(double impact) => GetSeverity(impact) switch
+    {
+        "High" => Color.Error,
+        "Medium" => Color.Warning,
+        "Low" => Color.Info,
+        _ => Color.Default
+    };
 
     protected override async Task OnInitializedAsync()
     {

@@ -6,13 +6,26 @@
 
 <PageTitle>Slow Query Radar</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Slow Query Radar</MudText>
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudIcon Icon="@Icons.Material.Filled.Speed" Color="Color.Primary" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Slow Query Radar</MudText>
+</MudStack>
 
 <MudGrid Class="mb-4">
-    <MudItem xs="12" sm="6" md="3"><MudCard><MudCardContent><MudText Typo="Typo.subtitle2">Queries Reviewed</MudText><MudText Typo="Typo.h4">@_queries.Count</MudText></MudCardContent></MudCard></MudItem>
-    <MudItem xs="12" sm="6" md="3"><MudCard><MudCardContent><MudText Typo="Typo.subtitle2">High-Priority Findings</MudText><MudText Typo="Typo.h4">@HighPriorityCount</MudText></MudCardContent></MudCard></MudItem>
-    <MudItem xs="12" sm="6" md="3"><MudCard><MudCardContent><MudText Typo="Typo.subtitle2">Validated Optimizations</MudText><MudText Typo="Typo.h4">0</MudText></MudCardContent></MudCard></MudItem>
-    <MudItem xs="12" sm="6" md="3"><MudCard><MudCardContent><MudText Typo="Typo.subtitle2">Estimated CPU Saved %</MudText><MudText Typo="Typo.h4">0.00%</MudText></MudCardContent></MudCard></MudItem>
+    @if (_loading && _queries.Count == 0)
+    {
+        @for (var index = 0; index < 4; index++)
+        {
+            <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudSkeleton Height="40px" /><MudSkeleton Width="70%" /></MudPaper></MudItem>
+        }
+    }
+    else
+    {
+        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Primary"><MudIcon Icon="@Icons.Material.Filled.Search" /></MudAvatar><MudStack><MudText Typo="Typo.caption">Queries Reviewed</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">@_queries.Count</MudText></MudStack></MudStack></MudPaper></MudItem>
+        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Error"><MudIcon Icon="@Icons.Material.Filled.Warning" /></MudAvatar><MudStack><MudText Typo="Typo.caption">High-Priority</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">@HighPriorityCount</MudText></MudStack></MudStack></MudPaper></MudItem>
+        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Success"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" /></MudAvatar><MudStack><MudText Typo="Typo.caption">Validated Fixes</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">0</MudText></MudStack></MudStack></MudPaper></MudItem>
+        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Info"><MudIcon Icon="@Icons.Material.Filled.Speed" /></MudAvatar><MudStack><MudText Typo="Typo.caption">CPU Saved %</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">0.00%</MudText></MudStack></MudStack></MudPaper></MudItem>
+    }
 </MudGrid>
 
 @if (_error is not null)
@@ -35,7 +48,10 @@
         <MudTd DataLabel="Exec Count">@context.ExecCount</MudTd>
         <MudTd DataLabel="Avg ms">@context.AvgDurationMs.ToString("F2")</MudTd>
         <MudTd DataLabel="Total CPU ms">@context.TotalCpuMs.ToString("F2")</MudTd>
-        <MudTd DataLabel="Impact">@context.ImpactScore.ToString("F2")</MudTd>
+        <MudTd DataLabel="Impact">
+            <MudText Typo="Typo.caption">@context.ImpactScore.ToString("F2")</MudText>
+            <MudProgressLinear Color="GetSeverityColor(context.ImpactScore)" Value="GetImpactPercent(context.ImpactScore)" />
+        </MudTd>
         <MudTd DataLabel="Severity"><MudChip T="string" Color="GetSeverityColor(context.ImpactScore)" Size="Size.Small">@GetSeverity(context.ImpactScore)</MudChip></MudTd>
         <MudTd DataLabel="Action"><MudButton Size="Size.Small" Variant="Variant.Outlined" @onclick="() => OpenQuery(context.QueryId)">Open</MudButton></MudTd>
     </RowTemplate>
@@ -57,6 +73,10 @@
         _ => "Info"
     };
 
+    private double MaxImpact => _queries.Count == 0 ? 0 : _queries.Max(query => query.ImpactScore);
+
+    private double GetImpactPercent(double impact) => MaxImpact == 0 ? 0 : impact / MaxImpact * 100;
+
     private static Color GetSeverityColor(double impact) => GetSeverity(impact) switch
     {
         "High" => Color.Error,
@@ -74,6 +94,7 @@
             StateHasChanged();
         }), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
     }
+
 
     private async Task LoadAsync()
     {

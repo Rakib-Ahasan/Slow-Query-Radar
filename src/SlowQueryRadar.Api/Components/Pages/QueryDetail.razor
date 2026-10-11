@@ -4,6 +4,7 @@
 @inject SqlAnalyzer Analyzer
 @inject ISuggestionEngine Suggester
 @inject QueryBenchmarker Benchmarker
+@inject BenchmarkHistoryStore BenchmarkHistoryStore
 @inject IJSRuntime JS
 @inject ILogger<QueryDetail> Logger
 @inject NavigationManager Navigation
@@ -87,19 +88,89 @@ else
             }
         </MudTabPanel>
         <MudTabPanel Text="Benchmark">
-            <MudGrid>
-                <MudItem xs="12" sm="6"><MudNumericField @bind-Value="_warmupRuns" Label="Warmup runs" Min="0" /></MudItem>
-                <MudItem xs="12" sm="6"><MudNumericField @bind-Value="_measuredRuns" Label="Measured runs" Min="1" /></MudItem>
+            <MudGrid Class="mb-4">
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="_warmupRuns" Label="Warmup runs" Min="0" Disabled="@_benchmarking" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="_measuredRuns" Label="Measured runs" Min="1" Disabled="@_benchmarking" />
+                </MudItem>
             </MudGrid>
-            <MudButton Class="mt-4" Variant="Variant.Filled" Color="Color.Primary" OnClick="RunBenchmarkAsync" Disabled="@_benchmarking">Run benchmark</MudButton>
+            @if (_benchmarking)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+            }
             @if (_benchmark is not null)
             {
-                <MudText Class="mt-4">P50: @_benchmark.DurationP50Ms.ToString("F2") ms | Logical reads: @_benchmark.LogicalReads</MudText>
-                <MudChart ChartType="ChartType.Bar" ChartSeries="_chartSeries" ChartLabels="_chartLabels" Width="100%" Height="300px" />
+                <MudGrid Class="mb-4">
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudText Typo="Typo.caption" Style="text-transform:uppercase">Duration P50</MudText>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold">@_benchmark.DurationP50Ms.ToString("F2") <MudText Inline="true" Typo="Typo.body2">ms</MudText></MudText>
+                            @if (_baseline is not null)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="GetDeltaColor(_baseline.DurationP50Ms, _benchmark.DurationP50Ms)">@GetDeltaText(_baseline.DurationP50Ms, _benchmark.DurationP50Ms)</MudChip>
+                            }
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudText Typo="Typo.caption" Style="text-transform:uppercase">Duration P95</MudText>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold">@_benchmark.DurationP95Ms.ToString("F2") <MudText Inline="true" Typo="Typo.body2">ms</MudText></MudText>
+                            @if (_baseline is not null)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="GetDeltaColor(_baseline.DurationP95Ms, _benchmark.DurationP95Ms)">@GetDeltaText(_baseline.DurationP95Ms, _benchmark.DurationP95Ms)</MudChip>
+                            }
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudText Typo="Typo.caption" Style="text-transform:uppercase">Logical Reads</MudText>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold">@_benchmark.LogicalReads</MudText>
+                            @if (_baseline is not null)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="GetDeltaColor(_baseline.LogicalReads, _benchmark.LogicalReads)">@GetDeltaText(_baseline.LogicalReads, _benchmark.LogicalReads)</MudChip>
+                            }
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudText Typo="Typo.caption" Style="text-transform:uppercase">Executions</MudText>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold">@_measuredRuns <MudText Inline="true" Typo="Typo.body2">runs</MudText></MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
             }
+            <MudChart ChartType="ChartType.Line" ChartSeries="_chartSeries" ChartLabels="_chartLabels" Width="100%" Height="320px" Class="ma-2" />
+            @if (_baseline is null && _current is not null)
+            {
+                <MudAlert Class="mt-4" Severity="MudSeverity.Info">Run and save a baseline before applying fixes to compare.</MudAlert>
+            }
+            @if (_baseline is not null && _current is not null)
+            {
+                <MudPaper Elevation="1" Class="pa-4 mt-4">
+                    <MudGrid>
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.caption">Duration</MudText>
+                            <MudText Typo="Typo.h5" Class="font-weight-bold">@GetImprovementText(_baseline.DurationP50Ms, _current.DurationP50Ms, "faster")</MudText>
+                            <MudText Typo="Typo.caption">@_baseline.DurationP50Ms.ToString("F1")ms ? @_current.DurationP50Ms.ToString("F1")ms</MudText>
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.caption">Logical Reads</MudText>
+                            <MudText Typo="Typo.h5" Class="font-weight-bold">@GetImprovementText(_baseline.LogicalReads, _current.LogicalReads, "less")</MudText>
+                            <MudText Typo="Typo.caption">@_baseline.LogicalReads ? @_current.LogicalReads</MudText>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            }
+            <MudStack Row="true" Spacing="3" Class="mt-4">
+                <MudButton Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="RunBenchmarkAsync" Disabled="@_benchmarking">RUN BENCHMARK</MudButton>
+                <MudButton Color="Color.Secondary" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Bookmark" OnClick="SaveBaselineAsync" Disabled="@(_current is null || _benchmarking)">SAVE AS BASELINE</MudButton>
+                <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ResetBenchmark" Disabled="@_benchmarking">RESET</MudButton>
+            </MudStack>
             @if (_benchmarkError is not null)
             {
-                <MudAlert Class="mt-4" Severity="MudSeverity.Warning">@_benchmarkError</MudAlert>
+                <MudAlert Class="mt-4" Severity="MudSeverity.Warning" Icon="@Icons.Material.Filled.Warning">@_benchmarkError</MudAlert>
             }
         </MudTabPanel>
     </MudTabs>
@@ -112,6 +183,8 @@ else
     private AnalysisResult? _analysis;
     private Suggestion? _suggestion;
     private BenchmarkResultDto? _benchmark;
+    private BenchmarkResult? _baseline;
+    private BenchmarkResult? _current;
     private int _warmupRuns = 1;
     private int _measuredRuns = 5;
     private bool _benchmarking;
@@ -119,7 +192,7 @@ else
     private bool _loading;
     private string? _error;
     private bool _notFound;
-    private readonly string[] _chartLabels = ["Duration P50 (ms)", "Logical reads"];
+    private readonly string[] _chartLabels = ["Duration P50", "Duration P95", "Logical Reads"];
     private List<ChartSeries<double>> _chartSeries = [];
 
     protected override async Task OnParametersSetAsync()
@@ -199,15 +272,11 @@ else
                 _warmupRuns,
                 _measuredRuns,
                 CancellationToken.None);
+            _current = benchmark;
             _benchmark = ApiMapper.ToDto(benchmark);
-            if (_benchmark is not null)
-            {
-                _chartSeries =
-                [
-                    new ChartSeries<double> { Name = "Before/Current", Data = new ChartData<double>(new[] { _benchmark.DurationP50Ms, (double)_benchmark.LogicalReads }) }
-                ];
-            }
+            UpdateChartSeries();
         }
+
         catch (UnsafeQueryException exception)
         {
             _benchmarkError = $"Cannot benchmark this query: {exception.Message}";
@@ -224,6 +293,76 @@ else
         {
             _benchmarking = false;
         }
+    }
+
+    private async Task SaveBaselineAsync()
+    {
+        if (_snapshot is null || _current is null)
+        {
+            return;
+        }
+
+        await BenchmarkHistoryStore.SaveAsync(
+            _snapshot.NormalizedSqlHash,
+            _snapshot.SqlText,
+            "before",
+            _current,
+            null,
+            CancellationToken.None);
+        _baseline = _current;
+        UpdateChartSeries();
+    }
+
+    private void UpdateChartSeries()
+    {
+        _chartSeries = [];
+        if (_baseline is not null)
+        {
+            _chartSeries.Add(new ChartSeries<double>
+            {
+                Name = "Baseline",
+                    Data = new ChartData<double>(new[] { _baseline.DurationP50Ms, _baseline.DurationP95Ms, (double)_baseline.LogicalReads })
+            });
+        }
+
+        if (_current is not null)
+        {
+            _chartSeries.Add(new ChartSeries<double>
+            {
+                Name = "Current",
+                    Data = new ChartData<double>(new[] { _current.DurationP50Ms, _current.DurationP95Ms, (double)_current.LogicalReads })
+            });
+        }
+    }
+
+    private void ResetBenchmark()
+    {
+        _benchmark = null;
+        _current = null;
+        _benchmarkError = null;
+        UpdateChartSeries();
+    }
+
+    private static double Improvement(double before, double after) => before == 0 ? 0 : (before - after) / before * 100;
+
+    private static Color GetDeltaColor(double before, double after) => Improvement(before, after) switch
+    {
+        >= 50 => Color.Success,
+        >= 20 => Color.Warning,
+        >= 0 => Color.Default,
+        _ => Color.Error
+    };
+
+    private static string GetDeltaText(double before, double after)
+    {
+        var improvement = Improvement(before, after);
+        return $"{(improvement < 0 ? "?" : "?")} {Math.Abs(improvement):F0}%";
+    }
+
+    private static string GetImprovementText(double before, double after, string suffix)
+    {
+        var improvement = Improvement(before, after);
+        return $"{Math.Abs(improvement):F1}% {(improvement < 0 ? "worse" : suffix)}";
     }
 
     private Task CopySqlAsync() => JS.InvokeVoidAsync("navigator.clipboard.writeText", _snapshot?.SqlText ?? string.Empty).AsTask();

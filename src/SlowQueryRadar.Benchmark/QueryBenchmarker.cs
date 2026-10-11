@@ -12,7 +12,6 @@ using Microsoft.SqlServer.TransactSql.ScriptDom;
 using SlowQueryRadar.Analyzer;
 using SlowQueryRadar.Core.Models;
 using SlowQueryRadar.Core.Sql;
-using System.Reflection;
 
 namespace SlowQueryRadar.Benchmark;
 
@@ -139,6 +138,22 @@ public sealed class QueryBenchmarker
             ct.ThrowIfCancellationRequested();
             await using var connection = _connectionFactory();
             await connection.OpenAsync(ct).ConfigureAwait(false);
+            long logicalReads = 0;
+            connection.InfoMessage += (_, eventArgs) =>
+            {
+                foreach (SqlError error in eventArgs.Errors)
+                {
+                    var match = Regex.Match(
+                        error.Message,
+                        @"logical reads (\d+)",
+                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                    if (match.Success && long.TryParse(match.Groups[1].Value, out var readsForObject))
+                    {
+                        logicalReads += readsForObject;
+                    }
+                }
+            };
+
             await connection.ExecuteAsync(new CommandDefinition(
                 "SET STATISTICS IO ON; SET STATISTICS TIME ON;",
                 cancellationToken: ct)).ConfigureAwait(false);
@@ -150,12 +165,15 @@ public sealed class QueryBenchmarker
                 boundParameters,
                 cancellationToken: ct)).ConfigureAwait(false)).AsList();
             stopwatch.Stop();
+            await connection.ExecuteAsync(new CommandDefinition(
+                "SET STATISTICS IO OFF; SET STATISTICS TIME OFF;",
+                cancellationToken: ct)).ConfigureAwait(false);
             var after = await ReadSessionMetricsAsync(connection, ct).ConfigureAwait(false);
 
             if (run >= warmupRuns)
             {
                 durations.Add(stopwatch.Elapsed.TotalMilliseconds);
-                reads.Add(Math.Max(0, after.LogicalReads - before.LogicalReads));
+                reads.Add(logicalReads);
                 cpuTimes.Add(Math.Max(0, after.CpuTimeMs - before.CpuTimeMs));
                 rowCount = rows.Count;
                 firstRowChecksum ??= ComputeFirstRowsChecksum(rows);
