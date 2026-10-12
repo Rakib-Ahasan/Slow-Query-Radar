@@ -34,12 +34,6 @@ builder.Services.AddControllers();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
-builder.Services.AddSingleton<QueryStateStore>();
-builder.Services.AddHttpClient<IQueriesApiClient, QueriesApiClient>(client =>
-{
-    var selfUrl = builder.Configuration["SelfUrl"] ?? "http://localhost:5017/";
-    client.BaseAddress = new Uri(selfUrl, UriKind.Absolute);
-});
 
 builder.Services.AddSlowQueryRadarCollector(builder.Configuration);
 builder.Services.AddSlowQueryRadarProfiler(builder.Configuration);
