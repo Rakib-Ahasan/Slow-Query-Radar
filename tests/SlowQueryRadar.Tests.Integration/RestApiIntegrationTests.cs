@@ -46,12 +46,9 @@ public sealed class RestApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
-        builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["QueryStore:ConnectionString"] = "Server=localhost;Database=RadarDb;Integrated Security=true",
-            ["Benchmark:ConnectionString"] = "Server=localhost;Database=RadarDb;Integrated Security=true",
-            ["SnapshotStore:ConnectionString"] = ":memory:"
-        }));
+        builder.UseSetting("QueryStore:ConnectionString", "Server=localhost;Database=RadarDb;Integrated Security=true");
+        builder.UseSetting("Benchmark:ConnectionString", "Server=localhost;Database=RadarDb;Integrated Security=true");
+        builder.UseSetting("SnapshotStore:ConnectionString", ":memory:");
         builder.ConfigureServices(services =>
         {
             services.AddSingleton<ISnapshotStore, FakeSnapshotStore>();

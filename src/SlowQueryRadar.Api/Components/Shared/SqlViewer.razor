@@ -1,0 +1,11 @@
+@* src/SlowQueryRadar.Api/Components/Shared/SqlViewer.razor *@
+<div class="radar-card radar-card-elevated pa-4"><div class="d-flex justify-space-between align-center mb-3"><MudText Typo="Typo.subtitle1">SQL signal</MudText><MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="CopyAsync">Copy</MudButton></div><pre class="radar-code sql-viewer" aria-label="SQL text">@DisplaySql</pre></div>
+@code {
+    /// <summary>SQL text.</summary>
+    [Parameter] public string Sql { get; set; } = string.Empty;
+    /// <summary>Shows normalized literals instead of original values.</summary>
+    [Parameter] public bool NormalizeLiterals { get; set; }
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+    private string DisplaySql => NormalizeLiterals ? System.Text.RegularExpressions.Regex.Replace(Sql, @"'(?:''|[^'])*'|\b\d+(?:\.\d+)?\b", "?") : Sql;
+    private Task CopyAsync() => JS.InvokeVoidAsync("navigator.clipboard.writeText", DisplaySql).AsTask();
+}

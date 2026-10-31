@@ -1,209 +1,96 @@
-@page "/query/{QueryId:long}"
+@page "/queries/{Target}/{Hash}"
 @rendermode InteractiveServer
-@inject IQueryStoreCollector Collector
-@inject SqlAnalyzer Analyzer
-@inject ISuggestionEngine Suggester
-@inject QueryBenchmarker Benchmarker
-@inject BenchmarkHistoryStore BenchmarkHistoryStore
-@inject IJSRuntime JS
-@inject ISnackbar Snackbar
-@inject ILogger<QueryDetail> Logger
-@inject NavigationManager Navigation
 
-<PageTitle>Query #@QueryId</PageTitle>
-
-@if (_loading)
-{
-    <MudSkeleton Height="42px" Width="45%" Class="mb-3" />
-    <MudSkeleton Height="150px" Class="mb-4" />
-    <MudSkeleton Height="420px" />
-}
-else if (_error is not null)
-{
-    <MudAlert Severity="MudSeverity.Error" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Error">Unable to load query. @_error <MudButton Variant="Variant.Text" OnClick="ReloadAsync">Retry</MudButton></MudAlert>
-}
-else if (_notFound || _snapshot is null)
-{
-    <EmptyState Title="Query not found" Message="This query is not available in the recent Query Store window." Icon="@Icons.Material.Filled.SearchOff"><MudButton Href="/" Variant="Variant.Outlined">Back to dashboard</MudButton></EmptyState>
-}
-else
-{
-    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
-        <MudBreadcrumbs Items="@Breadcrumbs" />
-        <MudStack Row="true" Spacing="1">
-            <MudTooltip Text="Favorite query"><MudIconButton Icon="@Icons.Material.Filled.StarBorder" OnClick="ToggleFavorite" aria-label="Favorite query" /></MudTooltip>
-            <MudTooltip Text="Copy link"><MudIconButton Icon="@Icons.Material.Filled.Share" OnClick="CopyLinkAsync" aria-label="Copy query link" /></MudTooltip>
-            <MudMenu Icon="@Icons.Material.Filled.MoreVert" aria-label="More query actions"><MudMenuItem OnClick="CopySqlAsync">Copy SQL</MudMenuItem><MudMenuItem Disabled="true">Open in SSMS</MudMenuItem><MudMenuItem Disabled="true">Add to report</MudMenuItem></MudMenu>
-        </MudStack>
-    </MudStack>
-
-    <MudPaper Elevation="2" Class="pa-5 mb-4">
-        <MudText Typo="Typo.h6" Class="sql-preview detail-sql">@_snapshot.SqlText</MudText>
-        <MudStack Row="true" Spacing="1" Class="mt-4" Style="flex-wrap:wrap">
-            <MudChip T="string" Size="Size.Small">@_snapshot.ExecCount execs</MudChip>
-            <MudChip T="string" Size="Size.Small">@_snapshot.AvgDurationMs.ToString("F2") ms avg</MudChip>
-            <MudChip T="string" Size="Size.Small">@FormatImpact(_snapshot.ImpactScore) impact</MudChip>
-            <SeverityChip Severity="@GetSeverity(_snapshot.ImpactScore)" />
-        </MudStack>
-    </MudPaper>
-
-    <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true">
-        <MudTabPanel Text="SQL" Icon="@Icons.Material.Filled.Code">
-            <CodeBlock Title="SQL text" Code="@_snapshot.SqlText" />
-        </MudTabPanel>
-        <MudTabPanel Text="Findings" Icon="@Icons.Material.Filled.BugReport">
-            @if (_analysis is null || _analysis.Findings.Count == 0)
+<PageTitle>Query detail · RADAR</PageTitle>
+<div class="d-flex justify-space-between align-center mb-6">
+    <div>
+        <MudText Typo="Typo.overline" Class="radar-muted">QUERY DETAIL / @Target</MudText>
+        <MudText Typo="Typo.h4">Orders.Search</MudText>
+        <MudText Class="radar-muted">Normalized hash <span class="radar-code">@Hash</span></MudText>
+    </div>
+    <MudButton Href="/tenants" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack">Back to tenant</MudButton>
+</div>
+<div class="radar-grid radar-grid-2">
+    <SqlViewer Sql="@Sql" NormalizeLiterals="_normalize" />
+    <div class="radar-card radar-card-elevated pa-4">
+        <div class="d-flex justify-space-between align-center">
+            <MudText Typo="Typo.subtitle1">Query pressure</MudText>
+            <MudChip T="string" Color="Color.Error">CRITICAL</MudChip>
+        </div>
+        <div class="radar-grid radar-grid-2 mt-4">
+            <div>
+                <div class="radar-muted">P95 DURATION</div>
+                <div class="radar-metric text-h4">842 ms</div>
+            </div>
+            <div>
+                <div class="radar-muted">EXECUTIONS</div>
+                <div class="radar-metric text-h4">18,420</div>
+            </div>
+        </div>
+        <MudSwitch @bind-Value="_normalize" Color="Color.Primary" Label="Normalize literals" Class="mt-4" />
+    </div>
+</div>
+<MudTabs Rounded="true" TabPanelsClass="pa-0 mt-5">
+    <MudTabPanel Text="Findings">
+        <div class="radar-grid radar-grid-2 mt-4">
+            @foreach (var finding in Findings)
             {
-                <EmptyState Title="No issues detected" Message="This query looks healthy based on the available analysis." Icon="@Icons.Material.Filled.CheckCircle" />
+                <div class="radar-card pa-4">
+                    <div class="d-flex justify-space-between">
+                        <MudChip T="string" Color="Color.Error" Size="Size.Small">@finding.Severity</MudChip>
+                        <span class="radar-pill radar-muted">@finding.Confidence confidence</span>
+                    </div>
+                    <MudText Typo="Typo.h6" Class="mt-3">@finding.Title</MudText>
+                    <MudText Class="radar-muted mt-2">@finding.Why</MudText>
+                    <div class="radar-code mt-3 pa-3" style="background:var(--radar-bg)">@finding.Evidence</div>
+                    <MudText Class="mt-3" Style="color:var(--radar-accent)">→ @finding.Fix</MudText>
+                </div>
             }
-            else
-            {
-                @foreach (var finding in _analysis.Findings)
-                {
-                    <MudCard Elevation="1" Class="mb-3">
-                        <MudCardContent>
-                            <MudGrid>
-                                <MudItem xs="12" md="1"><MudAvatar Color="SeverityColor(finding.Severity.ToString())"><MudIcon Icon="@Icons.Material.Filled.Warning" /></MudAvatar></MudItem>
-                                <MudItem xs="12" md="11">
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1"><SeverityChip Severity="@finding.Severity.ToString()" /><MudChip T="string" Size="Size.Small">@finding.RuleId</MudChip></MudStack>
-                                    <MudText Typo="Typo.h6" Class="mt-2">@finding.Message</MudText>
-                                    @if (!string.IsNullOrWhiteSpace(finding.Evidence)) { <MudText Typo="Typo.caption" Class="mt-1">@finding.Evidence</MudText> }
-                                    <MudChip T="string" Size="Size.Small" Color="SeverityColor(finding.Severity.ToString())" Class="mt-2">Est. impact: @finding.EstimatedImpactPercent:F0%</MudChip>
-                                </MudItem>
-                            </MudGrid>
-                        </MudCardContent>
-                    </MudCard>
-                }
-            }
-        </MudTabPanel>
-        <MudTabPanel Text="Suggested Fix" Icon="@Icons.Material.Filled.Build">
-            @if (_suggestion is null || string.IsNullOrWhiteSpace(_suggestion.DeterministicFix))
-            {
-                <MudAlert Severity="MudSeverity.Success" Icon="@Icons.Material.Filled.CheckCircle">No action needed.</MudAlert>
-            }
-            else
-            {
-                <MudText Typo="Typo.subtitle2" Class="mb-2">Recommended action</MudText>
-                <CodeBlock Title="Deterministic fix" Code="@_suggestion.DeterministicFix" />
-                <MudStack Row="true" Spacing="2" Class="mt-3"><MudButton Color="Color.Primary" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="CopyFixAsync">Copy</MudButton><MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download" OnClick="DownloadFixAsync">Download .sql</MudButton><MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Share" OnClick="CopyFixAsync">Share</MudButton></MudStack>
-                <MudAlert Severity="MudSeverity.Warning" Class="mt-3">Apply changes manually during a low-traffic window. SQL changes are never applied automatically.</MudAlert>
-            }
-        </MudTabPanel>
-        <MudTabPanel Text="Benchmark" Icon="@Icons.Material.Filled.Speed">
-            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.End" Style="flex-wrap:wrap">
-                <MudNumericField @bind-Value="_warmupRuns" Label="Warmup" Min="0" Max="10" Disabled="@_benchmarking" />
-                <MudNumericField @bind-Value="_measuredRuns" Label="Measured" Min="1" Max="20" Disabled="@_benchmarking" />
-                <MudButton Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="RunBenchmarkAsync" Disabled="@_benchmarking">Run Benchmark</MudButton>
-                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Bookmark" OnClick="SaveBaselineAsync" Disabled="@(_current is null || _benchmarking)">Save as Baseline</MudButton>
-                <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ResetBenchmark" Disabled="@_benchmarking">Reset</MudButton>
-            </MudStack>
-            @if (_benchmarking) { <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-4" /> }
-            @if (_benchmark is null)
-            {
-                <EmptyState Title="Run a benchmark to see results" Message="Compare duration and logical reads before applying a fix." Icon="@Icons.Material.Filled.Speed" />
-            }
-            else
-            {
-                <MudGrid Class="mt-4">
-                    <MudItem xs="12" sm="6" md="3"><StatCard Label="Duration P50" Value="@($"{_benchmark.DurationP50Ms:F2} ms")" Icon="@Icons.Material.Filled.Timer" Color="Color.Primary" Delta="@GetDelta(_baseline?.DurationP50Ms, _benchmark.DurationP50Ms)" DeltaColor="@GetDeltaColor(_baseline?.DurationP50Ms, _benchmark.DurationP50Ms)" /></MudItem>
-                    <MudItem xs="12" sm="6" md="3"><StatCard Label="Duration P95" Value="@($"{_benchmark.DurationP95Ms:F2} ms")" Icon="@Icons.Material.Filled.Timeline" Color="Color.Secondary" Delta="@GetDelta(_baseline?.DurationP95Ms, _benchmark.DurationP95Ms)" DeltaColor="@GetDeltaColor(_baseline?.DurationP95Ms, _benchmark.DurationP95Ms)" /></MudItem>
-                    <MudItem xs="12" sm="6" md="3"><StatCard Label="Logical Reads" Value="@_benchmark.LogicalReads.ToString()" Icon="@Icons.Material.Filled.Storage" Color="Color.Info" Delta="@GetDelta(_baseline?.LogicalReads, _benchmark.LogicalReads)" DeltaColor="@GetDeltaColor(_baseline?.LogicalReads, _benchmark.LogicalReads)" /></MudItem>
-                    <MudItem xs="12" sm="6" md="3"><StatCard Label="Executions" Value="@_measuredRuns.ToString()" Icon="@Icons.Material.Filled.Replay" Color="Color.Success" /></MudItem>
-                </MudGrid>
-                <MudPaper Elevation="2" Class="pa-4 mt-4"><MudChart ChartType="ChartType.Line" ChartSeries="_chartSeries" ChartLabels="_chartLabels" Width="100%" Height="320px" /></MudPaper>
-                @if (_baseline is not null)
-                {
-                    <MudAlert Severity="MudSeverity.Success" Class="mt-4">Duration: @ImprovementText(_baseline.DurationP50Ms, _benchmark.DurationP50Ms, "faster") · Reads: @ImprovementText(_baseline.LogicalReads, _benchmark.LogicalReads, "less")</MudAlert>
-                }
-                else
-                {
-                    <MudAlert Severity="MudSeverity.Info" Class="mt-4">Run and save a baseline before applying fixes to compare.</MudAlert>
-                }
-            }
-            @if (_benchmarkError is not null) { <MudAlert Severity="MudSeverity.Error" Class="mt-4">@_benchmarkError</MudAlert> }
-        </MudTabPanel>
-        <MudTabPanel Text="History" Icon="@Icons.Material.Filled.History">
-            <EmptyState Title="No prior runs" Message="Saved benchmark history will appear here." Icon="@Icons.Material.Filled.History" />
-        </MudTabPanel>
-    </MudTabs>
-}
+        </div>
+    </MudTabPanel>
+    <MudTabPanel Text="Plan">
+        <PlanGraph Operators="Plan" />
+    </MudTabPanel>
+    <MudTabPanel Text="History">
+        <div class="radar-card pa-6 mt-4">
+            <MudText Typo="Typo.subtitle1">Average duration · 24h</MudText>
+            <MetricSpark Values="@History" />
+            <div class="radar-metric text-h3 mt-4">+32.4%</div>
+            <MudText Class="radar-muted">Regression detected after plan change at 14:20 UTC.</MudText>
+        </div>
+    </MudTabPanel>
+    <MudTabPanel Text="Benchmark">
+        <div class="radar-card pa-6 mt-4">
+            <MudText Typo="Typo.subtitle1">Before / after benchmark</MudText>
+            <div class="radar-grid radar-grid-2 mt-5">
+                <div>
+                    <span class="radar-muted">ORIGINAL P95</span>
+                    <div class="radar-metric text-h4">842 ms</div>
+                    <MudProgressLinear Value="84" Color="Color.Error" />
+                </div>
+                <div>
+                    <span class="radar-muted">CANDIDATE P95</span>
+                    <div class="radar-metric text-h4" style="color:var(--radar-accent)">416 ms</div>
+                    <MudProgressLinear Value="42" Color="Color.Primary" />
+                </div>
+            </div>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-6" StartIcon="@Icons.Material.Filled.PlayArrow">Run benchmark</MudButton>
+        </div>
+    </MudTabPanel>
+</MudTabs>
 
 @code {
-    [Parameter] public long QueryId { get; set; }
-    private SlowQuerySnapshot? _snapshot;
-    private AnalysisResult? _analysis;
-    private Suggestion? _suggestion;
-    private BenchmarkResultDto? _benchmark;
-    private BenchmarkResult? _baseline;
-    private BenchmarkResult? _current;
-    private int _warmupRuns = 1;
-    private int _measuredRuns = 5;
-    private bool _benchmarking;
-    private string? _benchmarkError;
-    private bool _loading;
-    private string? _error;
-    private bool _notFound;
-    private readonly string[] _chartLabels = ["P50", "P95", "Max"];
-    private List<ChartSeries<double>> _chartSeries = [];
-    private List<BreadcrumbItem> Breadcrumbs => [new("Dashboard", href: "/"), new($"Query #{QueryId}", href: null, disabled: true)];
+    [Parameter] public string Target { get; set; } = string.Empty;
+    [Parameter] public string Hash { get; set; } = string.Empty;
 
-    protected override async Task OnParametersSetAsync() => await ReloadAsync();
+    private bool _normalize;
 
-    private async Task ReloadAsync()
-    {
-        _loading = true; _snapshot = null; _analysis = null; _suggestion = null; _error = null; _notFound = false;
-        try
-        {
-            using var source = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var snapshot = await Collector.GetByQueryIdAsync(QueryId, source.Token);
-            if (snapshot is null) { _notFound = true; return; }
-            _analysis = await Analyzer.AnalyzeAsync(snapshot, Array.Empty<DapperLogEntry>(), source.Token);
-            _suggestion = await Suggester.BuildSuggestionAsync(_analysis, snapshot.SqlText, source.Token);
-            _snapshot = snapshot;
-        }
-        catch (QueryStoreDisabledException exception) { _error = $"Query Store is disabled: {exception.Message}"; }
-        catch (Microsoft.Data.SqlClient.SqlException exception) { _error = $"Database error: {exception.Message}"; }
-        catch (OperationCanceledException) { _error = "Query timed out after 30 seconds."; }
-        catch (Exception exception) { _error = $"Unexpected error: {exception.Message}"; Logger.LogError(exception, "QueryDetail load failed"); }
-        finally { _loading = false; }
-    }
+    private string Sql => "SELECT o.Id, o.Status, o.CreatedAt\nFROM dbo.Orders AS o\nWHERE o.TenantId = 42\n  AND o.CreatedAt >= '2025-01-01'\nORDER BY o.CreatedAt DESC";
 
-    private async Task RunBenchmarkAsync()
-    {
-        _benchmarking = true; _benchmarkError = null;
-        try { if (_snapshot is null) return; var result = await Benchmarker.RunAsync(_snapshot.SqlText, (object?)null, _warmupRuns, _measuredRuns, CancellationToken.None); _current = result; _benchmark = ApiMapper.ToDto(result); UpdateChartSeries(); }
-        catch (UnsafeQueryException exception) { _benchmarkError = $"Cannot benchmark this query: {exception.Message}"; }
-        catch (Microsoft.Data.SqlClient.SqlException exception) { _benchmarkError = $"Database error: {exception.Message}"; }
-        catch (Exception exception) { _benchmarkError = $"Unexpected error: {exception.Message}"; }
-        finally { _benchmarking = false; }
-    }
+    private IReadOnlyList<double> History => [240, 280, 260, 310, 340, 420, 510, 620, 842];
+    private IReadOnlyList<PlanGraph.PlanNode> Plan => [new("Index Seek", 18, 18420, false, "IX_Orders_Tenant"), new("Key Lookup", 47, 18420, true, "Orders"), new("Sort", 35, 18420, false, "Orders")];
 
-    private async Task SaveBaselineAsync()
-    {
-        if (_snapshot is null || _current is null) return;
-        await BenchmarkHistoryStore.SaveAsync(_snapshot.NormalizedSqlHash, _snapshot.SqlText, "before", _current, null, CancellationToken.None);
-        _baseline = _current; UpdateChartSeries(); Snackbar.Add("Baseline saved", MudBlazor.Severity.Success);
-    }
+    private IReadOnlyList<FindingCard> Findings => [new("High", "Key lookup amplification", "18,420 executions · 18,420 lookups · 842 ms p95", "Repeated lookups amplify IO and latency.", "Add included columns after review; never auto-apply.", "High"), new("Medium", "Parameter-sensitive plan", "StdDev 2.4× average · 3 plans", "Different parameter shapes may receive unsuitable plans.", "Compare parameter shapes and plan history.", "Medium")];
 
-    private void UpdateChartSeries()
-    {
-        _chartSeries = [];
-        if (_baseline is not null) _chartSeries.Add(new ChartSeries<double> { Name = "Baseline", Data = new ChartData<double>([_baseline.DurationP50Ms, _baseline.DurationP95Ms, _baseline.DurationMaxMs]) });
-        if (_current is not null) _chartSeries.Add(new ChartSeries<double> { Name = "Current", Data = new ChartData<double>([_current.DurationP50Ms, _current.DurationP95Ms, _current.DurationMaxMs]) });
-    }
-
-    private void ResetBenchmark() { _benchmark = null; _current = null; _benchmarkError = null; UpdateChartSeries(); }
-    private void ToggleFavorite() => Snackbar.Add("Favorites are not persisted yet", MudBlazor.Severity.Info);
-    private async Task CopySqlAsync() { if (_snapshot is not null) { await JS.InvokeVoidAsync("navigator.clipboard.writeText", _snapshot.SqlText); Snackbar.Add("Copied!", MudBlazor.Severity.Success); } }
-    private async Task CopyFixAsync() { if (_suggestion is not null) { await JS.InvokeVoidAsync("navigator.clipboard.writeText", _suggestion.DeterministicFix); Snackbar.Add("Copied!", MudBlazor.Severity.Success); } }
-    private async Task CopyLinkAsync() { await JS.InvokeVoidAsync("navigator.clipboard.writeText", Navigation.Uri); Snackbar.Add("Link copied!", MudBlazor.Severity.Success); }
-    private async Task DownloadFixAsync() { if (_suggestion is not null) { await JS.InvokeVoidAsync("downloadTextFile", "suggested-fix.sql", _suggestion.DeterministicFix); Snackbar.Add("Downloaded", MudSeverity.Success); } }
-    private void BackToDashboard() => Navigation.NavigateTo("/");
-    private static string GetSeverity(double impact) => impact switch { >= 1_000_000 => "High", >= 100_000 => "Medium", >= 10_000 => "Low", _ => "Info" };
-    private static Color SeverityColor(string severity) => severity switch { "Critical" or "High" => Color.Error, "Medium" => Color.Warning, "Low" => Color.Info, _ => Color.Default };
-    private static string FormatImpact(double impact) => impact >= 1_000_000 ? $"{impact / 1_000_000:F1}M" : impact >= 1_000 ? $"{impact / 1_000:F1}K" : impact.ToString("F0");
-    private static double Improvement(double before, double after) => before == 0 ? 0 : (before - after) / before * 100;
-    private static string? GetDelta(double? before, double after) => before.HasValue ? $"{(Improvement(before.Value, after) < 0 ? "↑" : "↓")} {Math.Abs(Improvement(before.Value, after)):F0}%" : null;
-    private static Color GetDeltaColor(double? before, double after) => before.HasValue ? (Improvement(before.Value, after) < 0 ? Color.Error : Color.Success) : Color.Default;
-    private static string ImprovementText(double before, double after, string suffix) => $"{Math.Abs(Improvement(before, after)):F1}% {(Improvement(before, after) < 0 ? "worse" : suffix)}";
+    private sealed record FindingCard(string Severity, string Title, string Evidence, string Why, string Fix, string Confidence);
 }

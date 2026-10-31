@@ -1,0 +1,10 @@
+@* src/SlowQueryRadar.Api/Components/Shared/PlanGraph.razor *@
+<div class="radar-card radar-card-elevated pa-4"><MudText Typo="Typo.subtitle1" Class="mb-3">Operator topology</MudText><svg viewBox="0 0 760 220" class="plan-graph" role="img" aria-label="Execution plan operator tree">@for (var index = 0; index < Operators.Count; index++) { var op = Operators[index]; var x = 20 + index * 145; <g tabindex="0" role="button" @onclick="() => NodeClicked.InvokeAsync(op)"><rect x="@x" y="72" width="120" height="76" rx="8" fill="#18212D" stroke="@(op.Warning ? "#FF5C6C" : "#223041")" stroke-width="@(op.Warning ? 2 : 1)" /><text x="@(x + 10)" y="98" fill="#E6EDF3" font-size="12">@op.Name</text><text x="@(x + 10)" y="120" fill="#8FA3B8" font-size="11">@op.CostPercent.ToString("F0")% cost</text><text x="@(x + 10)" y="138" fill="#2DD4BF" font-size="10">@op.Rows.ToString("N0") rows</text>@if (index < Operators.Count - 1) { <line x1="@(x + 120)" y1="110" x2="@(x + 145)" y2="110" stroke="#2DD4BF" /> }</g>}</svg></div>
+@code {
+    /// <summary>Plan nodes.</summary>
+    [Parameter] public IReadOnlyList<PlanNode> Operators { get; set; } = [];
+    /// <summary>Raised when a node is selected.</summary>
+    [Parameter] public EventCallback<PlanNode> NodeClicked { get; set; }
+    /// <summary>Plan node.</summary>
+    public sealed record PlanNode(string Name, double CostPercent, double Rows, bool Warning, string? ObjectName = null);
+}

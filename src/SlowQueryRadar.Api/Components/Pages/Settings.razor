@@ -1,0 +1,49 @@
+@* src/SlowQueryRadar.Api/Components/Pages/Settings.razor *@
+@page "/settings"
+@rendermode InteractiveServer
+@inject ISnackbar Snackbar
+
+<PageTitle>Targets & settings · RADAR</PageTitle>
+<div class="mb-6">
+    <MudText Typo="Typo.overline" Class="radar-muted">CONTROL PLANE</MudText>
+    <MudText Typo="Typo.h4">Targets & settings</MudText>
+    <MudText Class="radar-muted">Tune collection safely. Secrets and connection strings are never displayed.</MudText>
+</div>
+<div class="radar-grid radar-grid-2">
+    <div class="radar-card radar-card-elevated pa-5">
+        <div class="d-flex justify-space-between align-center mb-4">
+            <div><MudText Typo="Typo.subtitle1">Monitored targets</MudText><MudText Typo="Typo.caption" Class="radar-muted">Read-only collection endpoints</MudText></div>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add">Add target</MudButton>
+        </div>
+        @foreach (var target in Targets)
+        {
+            <div class="target-row d-flex justify-space-between align-center py-3">
+                <div><MudText>@target.Name</MudText><MudText Typo="Typo.caption" Class="radar-muted">@target.Database · last collected @target.LastCollected</MudText></div>
+                <div class="d-flex align-center gap-2"><SeverityChip Severity="@target.Status" /><MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => Test(target.Name)">Test connection</MudButton></div>
+            </div>
+        }
+    </div>
+    <div class="radar-card radar-card-elevated pa-5">
+        <MudText Typo="Typo.subtitle1">Collection thresholds</MudText>
+        <MudText Typo="Typo.caption" Class="radar-muted">Applied to new snapshots only</MudText>
+        <MudTextField @bind-Value="_slowMs" Label="Slow query threshold (ms)" Variant="Variant.Outlined" Class="mt-5" InputType="InputType.Number" />
+        <MudTextField @bind-Value="_lookback" Label="Lookback window (hours)" Variant="Variant.Outlined" Class="mt-3" InputType="InputType.Number" />
+        <MudSwitch @bind-Value="_alerts" Color="Color.Primary" Label="Enable regression alerts" Class="mt-3" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="Save">Save thresholds</MudButton>
+    </div>
+</div>
+<div class="radar-card radar-card-elevated pa-5 mt-4">
+    <div class="d-flex justify-space-between align-center"><div><MudText Typo="Typo.subtitle1">Notifier configuration</MudText><MudText Typo="Typo.caption" Class="radar-muted">Destination details are masked in this interface.</MudText></div><MudChip T="string" Color="Color.Default">DISABLED</MudChip></div>
+    <div class="radar-grid radar-grid-2 mt-4"><MudSelect T="string" Label="Channel" Variant="Variant.Outlined" @bind-Value="_channel"><MudSelectItem Value="@("None")">None</MudSelectItem><MudSelectItem Value="@("Email")">Email</MudSelectItem><MudSelectItem Value="@("Webhook")">Webhook</MudSelectItem></MudSelect><MudTextField Value="@("masked")" Label="Destination" Variant="Variant.Outlined" ReadOnly="true" /></div>
+</div>
+
+@code {
+    private string _slowMs = "250";
+    private string _lookback = "24";
+    private string _channel = "None";
+    private bool _alerts = true;
+    private IReadOnlyList<TargetRow> Targets => [new("Production · Northstar", "NorthstarDb", "Healthy", "2 min ago"), new("Production · Bluebird", "BluebirdDb", "Critical", "4 min ago"), new("Staging · Atlas", "AtlasDb", "Low", "8 min ago")];
+    private void Test(string name) => Snackbar.Add($"Read-only connection test queued for {name}.", MudBlazor.Severity.Info);
+    private void Save() => Snackbar.Add("Thresholds saved locally. Production remains read-only.", MudBlazor.Severity.Success);
+    private sealed record TargetRow(string Name, string Database, string Status, string LastCollected);
+}

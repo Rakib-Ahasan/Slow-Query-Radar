@@ -61,6 +61,7 @@ builder.Services.AddSingleton<BenchmarkJobStore>();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
+builder.Services.AddSingleton<DemoDataService>();
 
 builder.Services.AddSlowQueryRadarCollector(builder.Configuration);
 builder.Services.AddSlowQueryRadarProfiler(builder.Configuration);
