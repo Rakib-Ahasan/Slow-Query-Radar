@@ -18,22 +18,7 @@ public static class SharedConfigurationExtensions
         this IConfigurationBuilder builder,
         string? startDirectory = null)
     {
-        ArgumentNullException.ThrowIfNull(builder);
-        startDirectory ??= AppContext.BaseDirectory;
-
-        var directory = new DirectoryInfo(startDirectory);
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(directory.FullName, "appsettings.Shared.json");
-            if (File.Exists(candidate))
-            {
-                builder.AddJsonFile(candidate, optional: true, reloadOnChange: false);
-                return builder;
-            }
-
-            directory = directory.Parent;
-        }
-
-        return builder;
+        _ = startDirectory;
+        return SharedConfiguration.AddSharedSettings(builder);
     }
 }

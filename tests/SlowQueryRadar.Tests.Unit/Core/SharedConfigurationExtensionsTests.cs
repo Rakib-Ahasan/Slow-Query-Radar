@@ -8,44 +8,52 @@ namespace SlowQueryRadar.Tests.Unit.Core;
 public sealed class SharedConfigurationExtensionsTests
 {
     [Fact]
-    public void AddSharedAppSettings_LoadsFileFromAncestorDirectory()
+    public void AddSharedSettings_FindsSharedFileFromNestedDirectory()
     {
         var root = CreateTemporaryDirectory();
-        var parent = Directory.CreateDirectory(Path.Combine(root.FullName, "parent"));
-        var leaf = Directory.CreateDirectory(Path.Combine(parent.FullName, "leaf"));
+        var nested = Directory.CreateDirectory(Path.Combine(root.FullName, "a", "b", "c"));
+        File.WriteAllText(Path.Combine(root.FullName, "SlowQueryRadar.slnx"), string.Empty);
         File.WriteAllText(
             Path.Combine(root.FullName, "appsettings.Shared.json"),
             "{\"QueryStore\":{\"ConnectionString\":\"shared-value\"}}");
+        var previousCurrentDirectory = Directory.GetCurrentDirectory();
 
         try
         {
-            var configuration = new ConfigurationBuilder()
-                .AddSharedAppSettings(leaf.FullName)
-                .Build();
+            Directory.SetCurrentDirectory(nested.FullName);
+            var builder = new ConfigurationBuilder();
+            SharedConfiguration.AddSharedSettings(builder);
+            var configuration = builder.Build();
 
             Assert.Equal("shared-value", configuration["QueryStore:ConnectionString"]);
         }
         finally
         {
+            Directory.SetCurrentDirectory(previousCurrentDirectory);
             root.Delete(recursive: true);
         }
     }
 
     [Fact]
-    public void AddSharedAppSettings_WhenFileIsMissing_IsNoOp()
+    public void AddSharedSettings_WhenFileIsMissing_IsNoOp()
     {
         var root = CreateTemporaryDirectory();
+        var nested = Directory.CreateDirectory(Path.Combine(root.FullName, "nested"));
+        File.WriteAllText(Path.Combine(root.FullName, "SlowQueryRadar.slnx"), string.Empty);
+        var previousCurrentDirectory = Directory.GetCurrentDirectory();
 
         try
         {
-            var configuration = new ConfigurationBuilder()
-                .AddSharedAppSettings(root.FullName)
-                .Build();
+            Directory.SetCurrentDirectory(nested.FullName);
+            var builder = new ConfigurationBuilder();
+            SharedConfiguration.AddSharedSettings(builder);
+            var configuration = builder.Build();
 
             Assert.Null(configuration["QueryStore:ConnectionString"]);
         }
         finally
         {
+            Directory.SetCurrentDirectory(previousCurrentDirectory);
             root.Delete(recursive: true);
         }
     }
@@ -54,17 +62,22 @@ public sealed class SharedConfigurationExtensionsTests
     public void EnvironmentVariablesOverrideSharedConfiguration()
     {
         var root = CreateTemporaryDirectory();
+        var nested = Directory.CreateDirectory(Path.Combine(root.FullName, "nested", "leaf"));
+        File.WriteAllText(Path.Combine(root.FullName, "SlowQueryRadar.slnx"), string.Empty);
         var variableName = "QueryStore__ConnectionString";
         var previousValue = Environment.GetEnvironmentVariable(variableName);
+        var previousCurrentDirectory = Directory.GetCurrentDirectory();
         File.WriteAllText(
             Path.Combine(root.FullName, "appsettings.Shared.json"),
             "{\"QueryStore\":{\"ConnectionString\":\"shared-value\"}}");
 
         try
         {
+            Directory.SetCurrentDirectory(nested.FullName);
             Environment.SetEnvironmentVariable(variableName, "environment-value");
-            var configuration = new ConfigurationBuilder()
-                .AddSharedAppSettings(root.FullName)
+            var builder = new ConfigurationBuilder();
+            SharedConfiguration.AddSharedSettings(builder);
+            var configuration = builder
                 .AddEnvironmentVariables()
                 .Build();
 
@@ -72,6 +85,7 @@ public sealed class SharedConfigurationExtensionsTests
         }
         finally
         {
+            Directory.SetCurrentDirectory(previousCurrentDirectory);
             Environment.SetEnvironmentVariable(variableName, previousValue);
             root.Delete(recursive: true);
         }

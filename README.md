@@ -15,7 +15,16 @@ Slow Query Radar collects, analyzes, and benchmarks slow SQL queries.
    ```powershell
    dotnet run --project src/SlowQueryRadar.Api
    dotnet run --project src/SlowQueryRadar.Cli -- collect --top 10
+	  dotnet run --project src/SlowQueryRadar.Cli -- doctor
    ```
+
+4. Validate local configuration and SQL access with the CLI doctor:
+   ```powershell
+   dotnet run --project src/SlowQueryRadar.Cli -- doctor
+   ```
+   The doctor command checks shared config discovery, SQL connectivity,
+   Query Store state, and `VIEW DATABASE STATE` permission. If TLS errors occur,
+   for dev use `TrustServerCertificate=True`; for prod install a trusted certificate.
 
 All three projects (Api, Cli, and Tests.Integration) read from this single
 file. Do not commit `appsettings.Shared.json`.

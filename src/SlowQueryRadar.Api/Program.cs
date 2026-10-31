@@ -1,5 +1,6 @@
 //src/SlowQueryRadar.Api/Program.cs
 using Serilog;
+using Microsoft.Data.SqlClient;
 using MudBlazor.Services;
 using SlowQueryRadar.Analyzer;
 using SlowQueryRadar.Api.Components;
@@ -18,11 +19,11 @@ if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT"
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.Sources.Clear();
+builder.Configuration.SetBasePath(AppContext.BaseDirectory);
+SharedConfiguration.AddSharedSettings(builder.Configuration);
 builder.Configuration
-    .SetBasePath(AppContext.BaseDirectory)
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: false)
-    .AddSharedAppSettings()
     .AddUserSecrets<Program>(optional: true)
     .AddEnvironmentVariables();
 
@@ -41,7 +42,14 @@ builder.Services.AddSlowQueryRadarAnalyzer();
 builder.Services.AddSlowQueryRadarSuggestions(builder.Configuration);
 builder.Services.AddSlowQueryRadarBenchmark(builder.Configuration);
 
+var queryStoreConnectionString = builder.Configuration["QueryStore:ConnectionString"];
+if (string.IsNullOrWhiteSpace(queryStoreConnectionString))
+{
+    throw new InvalidOperationException("QueryStore:ConnectionString is not configured. Copy appsettings.Shared.template.json to appsettings.Shared.json and set QueryStore:ConnectionString.");
+}
+
 var app = builder.Build();
+app.Logger.LogInformation("Configured Query Store SQL target {ConnectionSummary}", Program.DescribeConnection(queryStoreConnectionString));
 
 app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 {
@@ -81,4 +89,24 @@ app.Run();
 
 public partial class Program
 {
+    internal static string DescribeConnection(string? connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return "<empty>";
+        }
+
+        try
+        {
+            var builder = new SqlConnectionStringBuilder(connectionString);
+            var server = string.IsNullOrWhiteSpace(builder.DataSource) ? "<unknown>" : builder.DataSource;
+            var database = string.IsNullOrWhiteSpace(builder.InitialCatalog) ? "<default>" : builder.InitialCatalog;
+            var password = string.IsNullOrWhiteSpace(builder.Password) ? "<not-set>" : "***";
+            return $"Server={server};Database={database};Password={password}";
+        }
+        catch (ArgumentException)
+        {
+            return "<invalid connection string>";
+        }
+    }
 }
