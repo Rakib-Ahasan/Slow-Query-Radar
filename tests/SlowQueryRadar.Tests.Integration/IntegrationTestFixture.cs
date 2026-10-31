@@ -12,10 +12,11 @@ public sealed class IntegrationTestFixture
 
     private static IConfiguration BuildConfiguration()
     {
-        return new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
+        var builder = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory);
+        SharedConfiguration.AddSharedSettings(builder);
+        return builder
             .AddJsonFile("appsettings.json", optional: true)
-            .AddSharedAppSettings()
             .AddEnvironmentVariables()
             .Build();
     }

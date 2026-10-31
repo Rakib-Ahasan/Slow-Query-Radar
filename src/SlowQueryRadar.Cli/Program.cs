@@ -1,10 +1,11 @@
 //src/SlowQueryRadar.Cli/Program.cs
 using System.CommandLine;
-using System.Text.RegularExpressions;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Spectre.Console;
 using SlowQueryRadar.Analyzer;
 using SlowQueryRadar.Benchmark;
 using SlowQueryRadar.Cli.Commands;
@@ -31,10 +32,10 @@ public class Program
             {
                 configuration.Sources.Clear();
                 configuration.SetBasePath(AppContext.BaseDirectory);
+                SharedConfiguration.AddSharedSettings(configuration);
                 configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: false);
                 configuration.AddJsonFile($"appsettings.{context.HostingEnvironment.EnvironmentName}.json",
                     optional: true, reloadOnChange: false);
-                configuration.AddSharedAppSettings();
                 configuration.AddUserSecrets(typeof(Program).Assembly, optional: true);
                 configuration.AddEnvironmentVariables();
             })
@@ -47,16 +48,25 @@ public class Program
             })
             .Build();
 
+        var configuration = host.Services.GetRequiredService<IConfiguration>();
+        var queryStoreConnectionString = configuration["QueryStore:ConnectionString"];
+        if (!IsDoctorCommand(args) && string.IsNullOrWhiteSpace(queryStoreConnectionString))
+        {
+            AnsiConsole.MarkupLine("[red]Configuration error:[/] QueryStore:ConnectionString is not configured. Copy appsettings.Shared.template.json to appsettings.Shared.json and set QueryStore:ConnectionString.");
+            return 2;
+        }
+
         if (host.Services.GetRequiredService<IHostEnvironment>().IsDevelopment())
         {
             var logger = host.Services.GetRequiredService<ILogger<Program>>();
             logger.LogDebug(
-                "Loaded QueryStore connection string: {ConnectionString}",
-                MaskConnectionString(host.Services.GetRequiredService<IConfiguration>()["QueryStore:ConnectionString"]));
+                "Loaded QueryStore SQL target {ConnectionSummary}",
+                DescribeConnection(queryStoreConnectionString));
         }
 
         var root = new RootCommand("Slow Query Radar CLI");
         root.Add(CollectCommand.Create(host.Services));
+        root.Add(DoctorCommand.Create(host.Services));
         root.Add(AnalyzeCommand.Create(host.Services));
         root.Add(ReportCommand.Create(host.Services));
         root.Add(ScanRepoCommand.Create());
@@ -73,16 +83,29 @@ public class Program
         }
     }
 
-    private static string MaskConnectionString(string? connectionString)
+    internal static string DescribeConnection(string? connectionString)
     {
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             return "<empty>";
         }
 
-        return Regex.Replace(
-            connectionString,
-            "(?i)(Password|Pwd|ApiKey)\\s*=\\s*[^;]*",
-            "$1=***");
+        try
+        {
+            var builder = new SqlConnectionStringBuilder(connectionString);
+            var server = string.IsNullOrWhiteSpace(builder.DataSource) ? "<unknown>" : builder.DataSource;
+            var database = string.IsNullOrWhiteSpace(builder.InitialCatalog) ? "<default>" : builder.InitialCatalog;
+            var password = string.IsNullOrWhiteSpace(builder.Password) ? "<not-set>" : "***";
+            return $"Server={server};Database={database};Password={password}";
+        }
+        catch (ArgumentException)
+        {
+            return "<invalid connection string>";
+        }
+    }
+
+    private static bool IsDoctorCommand(string[] args)
+    {
+        return args.Length > 0 && string.Equals(args[0], "doctor", StringComparison.OrdinalIgnoreCase);
     }
 }
