@@ -1,14 +1,14 @@
 @* src/SlowQueryRadar.Api/Components/Shared/SeverityChip.razor *@
-<MudChip T="string" Size="Size.Small" Color="GetColor(Severity)">@Severity</MudChip>
+<span class="radar-severity-chip" data-severity="@Severity" style="--severity-color:@GetColor(Severity)" role="status">@Severity</span>
 
 @code {
     [Parameter, EditorRequired] public string Severity { get; set; } = string.Empty;
 
-    private static Color GetColor(string severity) => severity switch
+    private static string GetColor(string severity) => severity switch
     {
-        "Critical" or "High" => Color.Error,
-        "Medium" => Color.Warning,
-        "Low" => Color.Info,
-        _ => Color.Default
+        "Critical" or "High" => "var(--radar-critical)",
+        "Medium" => "var(--radar-warning)",
+        "Low" => "var(--radar-info)",
+        _ => "var(--radar-muted)"
     };
 }

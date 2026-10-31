@@ -11,13 +11,16 @@ namespace SlowQueryRadar.Analyzer;
 public sealed class SqlAnalyzer
 {
     private readonly IReadOnlyList<ISqlRule> _rules;
+    private readonly IReadOnlyList<IAnalysisRule> _analysisRules;
 
     /// <summary>Initializes an analyzer with the configured SQL rules.</summary>
     /// <param name="rules">The rules to execute.</param>
-    public SqlAnalyzer(IEnumerable<ISqlRule> rules)
+    /// <param name="analysisRules">The unified analysis rules to execute.</param>
+    public SqlAnalyzer(IEnumerable<ISqlRule> rules, IEnumerable<IAnalysisRule>? analysisRules = null)
     {
         ArgumentNullException.ThrowIfNull(rules);
         _rules = rules.ToArray();
+        _analysisRules = analysisRules?.ToArray() ?? [];
     }
 
     /// <summary>Parses SQL into statement fragments using TSql170Parser.</summary>
@@ -76,7 +79,14 @@ public sealed class SqlAnalyzer
         var parsedStatement = statements.FirstOrDefault(statement => statement is not DeclareVariableStatement)
             ?? statements[0];
         var context = new SqlAnalysisContext(snapshot.SqlText, parsedStatement, snapshot.ExecutionPlanXml);
+        var analysisContext = new AnalysisContext(snapshot, parsedStatement, recentLogs);
         var findings = new List<Finding>();
+        foreach (var rule in _analysisRules)
+        {
+            ct.ThrowIfCancellationRequested();
+            findings.AddRange(rule.Analyze(analysisContext));
+        }
+
         foreach (var rule in _rules)
         {
             ct.ThrowIfCancellationRequested();

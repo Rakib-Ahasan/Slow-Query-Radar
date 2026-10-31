@@ -25,6 +25,7 @@ public static class DependencyInjection
         services.AddHttpClient();
         services.AddSingleton<IndexScriptGenerator>();
         services.AddSingleton<DapperSnippetGenerator>();
+        services.AddSingleton<DeterministicSuggester>();
         services.AddSingleton<SqlLiteralStripper>();
 
         if (bool.TryParse(configuration["Ai:Enabled"], out var aiEnabled) && aiEnabled)

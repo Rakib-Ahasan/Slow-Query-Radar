@@ -21,12 +21,14 @@ public sealed class BenchmarkOptions
         if (!string.Equals(Environment, "Dev", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(Environment, "Development", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(Environment, "Staging", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(Environment, "Prod", StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(Environment, "Prod", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(Environment, "Production", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("Benchmark Environment must be Dev, Development, or Staging.");
         }
 
-        if (string.Equals(Environment, "Prod", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(Environment, "Prod", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(Environment, "Production", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("Benchmarking is disabled for the configured environment.");
         }

@@ -1,0 +1,23 @@
+@* src/SlowQueryRadar.Api/Components/Shared/HeatmapGrid.razor *@
+<div class="radar-card radar-card-elevated pa-4">
+    <div class="d-flex justify-space-between align-center mb-4"><div><MudText Typo="Typo.subtitle1">Pressure map</MudText><MudText Typo="Typo.caption" Class="radar-muted">p95 duration · last 24 hours</MudText></div><span class="radar-muted radar-code">ms</span></div>
+    <div class="heatmap" role="grid" aria-label="Tenant duration heatmap">
+        @foreach (var tenant in Rows)
+        {
+            <div class="heatmap-row" role="row"><span class="heatmap-label">@tenant</span>@foreach (var bucket in Buckets) { var cell = Cells.FirstOrDefault(x => x.Tenant == tenant && x.Bucket == bucket); <button class="heat-cell" style="background:@Color(cell?.Value ?? 0)" title="@tenant · @bucket.ToString("HH:mm") · @(cell?.Value.ToString("F0") ?? "0") ms" aria-label="@tenant @bucket.ToString("HH:mm") @(cell?.Value.ToString("F0") ?? "0") milliseconds" @onclick="() => CellClicked.InvokeAsync(cell)"></button>}</div>
+        }
+    </div>
+</div>
+@code {
+    /// <summary>Tenant rows.</summary>
+    [Parameter] public IReadOnlyList<string> Rows { get; set; } = [];
+    /// <summary>Time buckets.</summary>
+    [Parameter] public IReadOnlyList<DateTimeOffset> Buckets { get; set; } = [];
+    /// <summary>Heatmap cells.</summary>
+    [Parameter] public IReadOnlyList<HeatmapCell> Cells { get; set; } = [];
+    /// <summary>Raised when a cell is selected.</summary>
+    [Parameter] public EventCallback<HeatmapCell?> CellClicked { get; set; }
+    private static string Color(double value) => value switch { > 800 => "#FF5C6C", > 400 => "#F5B544", > 150 => "#0F766E", _ => "#183B45" };
+    /// <summary>Heatmap cell.</summary>
+    public sealed record HeatmapCell(string Tenant, DateTimeOffset Bucket, double Value);
+}

@@ -6,6 +6,9 @@
 		<StmtSimple StatementText="SELECT Name FROM dbo.Users WHERE Id = 5" StatementType="SELECT">
 		  <QueryPlan>
 			<RelOp NodeId="0" PhysicalOp="Key Lookup" LogicalOp="Key Lookup" EstimateRows="25" EstimateCPU="0.01">
+			  <RunTimeInformation>
+				<RunTimeCountersPerThread Thread="0" ActualRows="25" ActualExecutions="1000" />
+			  </RunTimeInformation>
 			  <IndexScan>
 				<Object Database="[RadarDb]" Schema="[dbo]" Table="[Users]" Index="[PK_Users]" />
 			  </IndexScan>

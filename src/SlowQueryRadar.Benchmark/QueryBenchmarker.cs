@@ -1,5 +1,6 @@
 //src/SlowQueryRadar.Benchmark/QueryBenchmarker.cs
 using System.Diagnostics;
+using System.Data.Common;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -95,6 +96,42 @@ public sealed class QueryBenchmarker
         return await RunCoreAsync(sql, parameters, null, warmupRuns, measuredRuns, ct).ConfigureAwait(false);
     }
 
+    /// <summary>Benchmarks original and proposed SELECT statements and compares their metrics.</summary>
+    /// <param name="originalSql">The original SELECT statement.</param>
+    /// <param name="proposedSql">The proposed SELECT statement.</param>
+    /// <param name="parameters">Shared Dapper parameters.</param>
+    /// <param name="warmupRuns">Warm-up executions discarded from statistics.</param>
+    /// <param name="measuredRuns">Measured executions per statement.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Before/after metrics and improvement percentages.</returns>
+    public async Task<BenchmarkComparisonResult> CompareAsync(
+        string originalSql,
+        string proposedSql,
+        object? parameters,
+        int warmupRuns,
+        int measuredRuns,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(originalSql);
+        ArgumentNullException.ThrowIfNull(proposedSql);
+        ValidateSql(originalSql);
+        ValidateSql(proposedSql);
+        var original = await RunAsync(originalSql, parameters, warmupRuns, measuredRuns, ct).ConfigureAwait(false);
+        var proposed = await RunAsync(proposedSql, parameters, warmupRuns, measuredRuns, ct).ConfigureAwait(false);
+        var confidence = original.RowCount == proposed.RowCount
+            && string.Equals(original.FirstRowChecksum, proposed.FirstRowChecksum, StringComparison.OrdinalIgnoreCase)
+            ? "High: result-set row count and checksum match."
+            : "Low: result-set shape or checksum differs; review proposed SQL before use.";
+        return new BenchmarkComparisonResult(
+            original,
+            proposed,
+            Improvement(original.DurationP50Ms, proposed.DurationP50Ms),
+            Improvement(original.LogicalReads, proposed.LogicalReads),
+            confidence,
+            original.RowCount == proposed.RowCount
+                && string.Equals(original.FirstRowChecksum, proposed.FirstRowChecksum, StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>Runs a benchmark with optional named parameter overrides.</summary>
     /// <param name="sql">The SQL text.</param>
     /// <param name="parameterOverrides">Optional parameter values keyed by parameter name.</param>
@@ -138,6 +175,7 @@ public sealed class QueryBenchmarker
             ct.ThrowIfCancellationRequested();
             await using var connection = _connectionFactory();
             await connection.OpenAsync(ct).ConfigureAwait(false);
+            await using var transaction = await connection.BeginTransactionAsync(ct).ConfigureAwait(false);
             long logicalReads = 0;
             connection.InfoMessage += (_, eventArgs) =>
             {
@@ -156,19 +194,22 @@ public sealed class QueryBenchmarker
 
             await connection.ExecuteAsync(new CommandDefinition(
                 "SET STATISTICS IO ON; SET STATISTICS TIME ON;",
+                transaction: transaction,
                 cancellationToken: ct)).ConfigureAwait(false);
 
-            var before = await ReadSessionMetricsAsync(connection, ct).ConfigureAwait(false);
+            var before = await ReadSessionMetricsAsync(connection, transaction, ct).ConfigureAwait(false);
             var stopwatch = Stopwatch.StartNew();
             var rows = (await connection.QueryAsync(new CommandDefinition(
                 normalized.Sql,
                 boundParameters,
+                transaction: transaction,
                 cancellationToken: ct)).ConfigureAwait(false)).AsList();
             stopwatch.Stop();
             await connection.ExecuteAsync(new CommandDefinition(
                 "SET STATISTICS IO OFF; SET STATISTICS TIME OFF;",
+                transaction: transaction,
                 cancellationToken: ct)).ConfigureAwait(false);
-            var after = await ReadSessionMetricsAsync(connection, ct).ConfigureAwait(false);
+            var after = await ReadSessionMetricsAsync(connection, transaction, ct).ConfigureAwait(false);
 
             if (run >= warmupRuns)
             {
@@ -178,6 +219,8 @@ public sealed class QueryBenchmarker
                 rowCount = rows.Count;
                 firstRowChecksum ??= ComputeFirstRowsChecksum(rows);
             }
+
+            await transaction.RollbackAsync(ct).ConfigureAwait(false);
         }
 
         durations.Sort();
@@ -285,12 +328,15 @@ public sealed class QueryBenchmarker
         return DBNull.Value;
     }
 
-    private static async Task<SessionMetrics> ReadSessionMetricsAsync(SqlConnection connection, CancellationToken ct)
+    private static async Task<SessionMetrics> ReadSessionMetricsAsync(SqlConnection connection, DbTransaction transaction, CancellationToken ct)
     {
         return await connection.QuerySingleAsync<SessionMetrics>(new CommandDefinition(
             SessionMetricsSql,
+            transaction: transaction,
             cancellationToken: ct)).ConfigureAwait(false);
     }
+
+    private static double Improvement(double before, double after) => before <= 0 ? 0 : (before - after) / before * 100;
 
     private static double Percentile(IReadOnlyList<double> values, double percentile)
     {

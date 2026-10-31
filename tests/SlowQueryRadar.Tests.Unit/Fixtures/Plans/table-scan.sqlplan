@@ -8,6 +8,9 @@
 			<RelOp NodeId="0" PhysicalOp="Table Scan" LogicalOp="Table Scan" EstimateRows="15000" EstimateCPU="0.2">
 			  <TableScan>
 				<Object Database="[RadarDb]" Schema="[dbo]" Table="[Users]" />
+				<Predicate>
+				  <ScalarOperator ScalarString="[dbo].[Users].[TenantId]=[@TenantId]" />
+				</Predicate>
 			  </TableScan>
 			</RelOp>
 		  </QueryPlan>

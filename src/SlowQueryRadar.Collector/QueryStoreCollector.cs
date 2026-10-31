@@ -180,7 +180,10 @@ public sealed class QueryStoreCollector : IQueryStoreCollector
         TotalPhysicalReads = row.TotalPhysicalReads, TotalLogicalWrites = row.TotalLogicalWrites, TotalRows = row.TotalRows, PlanCount = row.PlanCount,
         LastExecutionTime = row.LastExecutionTime, LastCompileStartTime = row.LastCompileStartTime,
         Plans = plans.Select(plan => new PlanSummary(plan.PlanId, plan.IsForcedPlan, plan.LastExecutionTime, plan.ExecutionCount, plan.AvgDurationMs, plan.MaxDurationMs, plan.StandardDeviationMs, null)).ToArray(),
-        CapturedAtUtc = captured
+        CapturedAtUtc = captured,
+        FeatureName = RadarTagParser.Parse(row.SqlText).FeatureName,
+        TenantId = RadarTagParser.Parse(row.SqlText).TenantId,
+        Caller = RadarTagParser.Parse(row.SqlText).Caller
     };
 
     private static string BuildOrderBy(RankBy rankBy) => rankBy switch

@@ -18,4 +18,7 @@ public sealed class AiOptions
 
     /// <summary>Gets or sets the request timeout in seconds.</summary>
     public int TimeoutSeconds { get; set; } = 10;
+
+    /// <summary>Gets the normalized timeout used for AI requests.</summary>
+    public TimeSpan Timeout => TimeSpan.FromSeconds(TimeoutSeconds > 0 ? TimeoutSeconds : 10);
 }

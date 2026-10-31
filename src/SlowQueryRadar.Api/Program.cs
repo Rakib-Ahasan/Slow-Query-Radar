@@ -13,6 +13,11 @@ using SlowQueryRadar.Core.Configuration;
 using SlowQueryRadar.Core.Models;
 using SlowQueryRadar.Profiler;
 using SlowQueryRadar.Suggestions;
+using Scalar.AspNetCore;
+using System.Threading.RateLimiting;
+using SlowQueryRadar.Api.Health;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")))
 {
@@ -34,9 +39,29 @@ builder.Host.UseSerilog((context, configuration) => configuration
     .Enrich.FromLogContext());
 
 builder.Services.AddControllers();
+builder.Services.AddHealthChecks()
+    .AddCheck<SnapshotStoreHealthCheck>("snapshot-store", tags: ["ready"])
+    .AddCheck<TargetAvailabilityHealthCheck>("targets", tags: ["ready"]);
+builder.Services.AddOpenApi();
+builder.Services.AddCors(options => options.AddPolicy("ApiCors", policy =>
+    policy.WithOrigins(builder.Configuration.GetSection("Api:Cors:Origins").Get<string[]>() ?? ["http://localhost:5017"])
+        .AllowAnyHeader().AllowAnyMethod()));
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("benchmarks", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        }));
+});
+builder.Services.AddSingleton<BenchmarkJobStore>();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
+builder.Services.AddSingleton<DemoDataService>();
 
 builder.Services.AddSlowQueryRadarCollector(builder.Configuration);
 builder.Services.AddSlowQueryRadarProfiler(builder.Configuration);
@@ -85,8 +110,26 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors("ApiCors");
+app.UseRateLimiter();
+app.Use(async (context, next) =>
+{
+    var requiredKey = app.Configuration["Api:ApiKey"];
+    if (!app.Environment.IsDevelopment() && !string.IsNullOrWhiteSpace(requiredKey)
+        && (!context.Request.Headers.TryGetValue("X-Api-Key", out var provided) || provided != requiredKey))
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await context.Response.WriteAsJsonAsync(new ProblemDetails { Title = "API key required", Status = 401 });
+        return;
+    }
+    await next();
+});
 app.UseAntiforgery();
 app.MapControllers();
+app.MapHealthChecks("/api/v1/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/api/v1/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
+app.MapOpenApi();
+app.MapScalarApiReference();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

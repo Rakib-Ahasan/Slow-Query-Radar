@@ -18,22 +18,26 @@ public sealed class SuggestionEngine : ISuggestionEngine
     private readonly IMemoryCache _cache;
     private readonly AiOptions _aiOptions;
     private readonly IAiExplainer? _aiExplainer;
+    private readonly DeterministicSuggester _deterministicSuggester;
 
     /// <summary>Initializes the suggestion engine.</summary>
     /// <param name="dapperSnippetGenerator">The Dapper snippet generator.</param>
     /// <param name="cache">The memory cache.</param>
     /// <param name="aiOptions">AI configuration.</param>
     /// <param name="aiExplainer">Optional AI explainer.</param>
+    /// <param name="deterministicSuggester">Optional deterministic action suggester.</param>
     public SuggestionEngine(
         DapperSnippetGenerator dapperSnippetGenerator,
         IMemoryCache cache,
         IOptions<AiOptions> aiOptions,
-        IAiExplainer? aiExplainer = null)
+        IAiExplainer? aiExplainer = null,
+        DeterministicSuggester? deterministicSuggester = null)
     {
         _dapperSnippetGenerator = dapperSnippetGenerator;
         _cache = cache;
         _aiOptions = aiOptions.Value;
         _aiExplainer = aiExplainer;
+        _deterministicSuggester = deterministicSuggester ?? new DeterministicSuggester();
     }
 
     /// <inheritdoc />

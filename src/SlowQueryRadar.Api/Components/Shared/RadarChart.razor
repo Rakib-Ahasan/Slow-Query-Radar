@@ -1,0 +1,30 @@
+@* src/SlowQueryRadar.Api/Components/Shared/RadarChart.razor *@
+<div class="radar-card radar-card-elevated radar-chart-wrap">
+    <div class="d-flex justify-space-between align-center pa-4">
+        <div><MudText Typo="Typo.subtitle1">Fleet signal</MudText><MudText Typo="Typo.caption" Class="radar-muted">Impact gravity · live query pressure</MudText></div>
+        <span class="radar-pill radar-muted">@Blips.Count targets</span>
+    </div>
+    <svg viewBox="0 0 420 300" class="radar-chart" role="img" aria-label="Fleet impact radar">
+        <defs><radialGradient id="radarGlow"><stop offset="0" stop-color="#2DD4BF" stop-opacity=".18" /><stop offset="1" stop-color="#2DD4BF" stop-opacity="0" /></radialGradient></defs>
+        <circle cx="210" cy="150" r="132" fill="url(#radarGlow)" />
+        @foreach (var radius in new[] { 44, 88, 132 }) { <circle cx="210" cy="150" r="@radius" fill="none" stroke="#223041" stroke-width="1" /> }
+        <line x1="210" y1="150" x2="210" y2="18" stroke="#223041" /><line x1="78" y1="150" x2="342" y2="150" stroke="#223041" />
+        <line class="radar-sweep" x1="210" y1="150" x2="210" y2="22" stroke="#2DD4BF" stroke-opacity=".7" stroke-width="2" />
+        @foreach (var blip in Blips)
+        {
+            <g class="radar-blip" tabindex="0" role="button" aria-label="@blip.Name: @blip.Queries queries" transform="translate(@(210 + blip.X) @(150 + blip.Y))" @onclick="() => BlipClicked.InvokeAsync(blip)">
+                <circle r="@blip.Size" fill="@blip.Color" fill-opacity=".9" />
+                <title>@blip.Name · @blip.Queries queries · @blip.Severity</title>
+            </g>
+        }
+        <circle cx="210" cy="150" r="6" fill="#2DD4BF" />
+    </svg>
+</div>
+@code {
+    /// <summary>Radar blip data.</summary>
+    [Parameter] public IReadOnlyList<RadarBlip> Blips { get; set; } = [];
+    /// <summary>Raised when a blip is selected.</summary>
+    [Parameter] public EventCallback<RadarBlip> BlipClicked { get; set; }
+    /// <summary>Radar blip.</summary>
+    public sealed record RadarBlip(string Name, double X, double Y, double Size, string Color, int Queries, string Severity);
+}

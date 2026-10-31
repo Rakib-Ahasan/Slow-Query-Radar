@@ -1,166 +1,24 @@
 @page "/"
 @rendermode InteractiveServer
-@implements IAsyncDisposable
-@inject IQueryStoreCollector Collector
+@inject DemoDataService Demo
 @inject NavigationManager Nav
-@inject ISnackbar Snackbar
-@inject IJSRuntime JS
-@inject IJSRuntime JS
 
-<PageTitle>Slow Queries</PageTitle>
-
-<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.End" Class="mb-6">
-    <MudStack Spacing="0">
-        <MudText Typo="Typo.h5">Slow Queries</MudText>
-        <MudText Typo="Typo.body2" Color="Color.Secondary">@_queries.Count queries · Last @_lookbackHours h · Updated @_lastRefresh.ToString("HH:mm:ss")</MudText>
-    </MudStack>
-    <MudStack Row="true" Spacing="2">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RefreshAsync" Disabled="@_loading">Refresh</MudButton>
-        <MudMenu Icon="@Icons.Material.Filled.Settings" aria-label="Dashboard settings">
-            <MudMenuItem Disabled="true">Refresh interval: 60 seconds</MudMenuItem>
-            <MudMenuItem Disabled="true">Showing top @_topN queries</MudMenuItem>
-        </MudMenu>
-    </MudStack>
-</MudStack>
-
-<MudGrid Class="mb-4">
-    @if (_loading && _queries.Count == 0)
-    {
-        @for (var index = 0; index < 4; index++)
-        {
-            <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="1" Class="pa-4"><MudSkeleton Height="48px" /><MudSkeleton Width="70%" /></MudPaper></MudItem>
-        }
-    }
-    else
-    {
-        <MudItem xs="12" sm="6" md="3"><StatCard Label="Queries Reviewed" Value="@_queries.Count.ToString()" Icon="@Icons.Material.Filled.Search" Color="Color.Primary" /></MudItem>
-        <MudItem xs="12" sm="6" md="3"><StatCard Label="High-Priority" Value="@HighPriorityCount.ToString()" Icon="@Icons.Material.Filled.Warning" Color="Color.Error" /></MudItem>
-        <MudItem xs="12" sm="6" md="3"><StatCard Label="Validated Fixes" Value="0" Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" /></MudItem>
-        <MudItem xs="12" sm="6" md="3"><StatCard Label="Est. CPU Saved %" Value="0.00%" Icon="@Icons.Material.Filled.Speed" Color="Color.Info" /></MudItem>
-    }
-</MudGrid>
-
-<MudPaper Elevation="1" Class="pa-3 mt-4 mb-4">
-    <MudGrid>
-        <MudItem xs="12" md="5">
-            <MudTextField @bind-Value="_searchText" Immediate="true" Label="Search SQL" Placeholder="Search SQL..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Clearable="true" aria-label="Search SQL queries" />
-        </MudItem>
-        <MudItem xs="12" sm="6" md="3">
-            <MudSelect T="string" @bind-Value="_severityFilter" Label="Severity">
-                <MudSelectItem Value="@("All")">All severities</MudSelectItem>
-                <MudSelectItem Value="@("High")">High</MudSelectItem>
-                <MudSelectItem Value="@("Medium")">Medium</MudSelectItem>
-                <MudSelectItem Value="@("Low")">Low</MudSelectItem>
-                <MudSelectItem Value="@("Info")">Info</MudSelectItem>
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="12" sm="6" md="2">
-            <MudSelect T="string" @bind-Value="_sortOrder" Label="Sort">
-                <MudSelectItem Value="@("Impact")">Impact</MudSelectItem>
-                <MudSelectItem Value="@("Duration")">Duration</MudSelectItem>
-                <MudSelectItem Value="@("Executions")">Executions</MudSelectItem>
-                <MudSelectItem Value="@("Recent")">Recent</MudSelectItem>
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="12" md="2"><MudChip T="string" Color="Color.Primary" Class="mt-2">@FilteredQueries.Count() filtered</MudChip></MudItem>
-    </MudGrid>
-</MudPaper>
-
-@if (_loading && _queries.Count > 0)
-{
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
-}
-
-@if (_error is not null)
-{
-    <MudAlert Severity="MudSeverity.Error" Variant="Variant.Outlined" Class="mb-4">Unable to load slow queries. @_error <MudButton Variant="Variant.Text" OnClick="RefreshAsync">Retry</MudButton></MudAlert>
-}
-else if (!_loading && !FilteredQueries.Any())
-{
-    <EmptyState Title="No slow queries detected" Message="Try extending the time range or clearing your filters." Icon="@Icons.Material.Filled.SearchOff">
-        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RefreshAsync">Refresh</MudButton>
-    </EmptyState>
-}
-else
-{
-    <MudPaper Elevation="1" Class="pa-2" Style="overflow-x:auto">
-        <MudTable T="SlowQueryDto" Items="FilteredQueries" Hover="true" Dense="true" Bordered="false" OnRowClick="HandleRowClick">
-            <HeaderContent>
-                <MudTh>Query</MudTh><MudTh>SQL Preview</MudTh><MudTh>Exec Count</MudTh><MudTh>Avg ms</MudTh><MudTh>Total CPU ms</MudTh><MudTh>Impact</MudTh><MudTh>Severity</MudTh><MudTh>Actions</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Query"><MudChip T="string" Size="Size.Small" Color="Color.Primary">#@context.QueryId</MudChip></MudTd>
-                <MudTd DataLabel="SQL Preview"><MudTooltip Text="@context.SqlText"><MudText Class="sql-preview" Typo="Typo.body2">@Truncate(context.SqlText, 80)</MudText></MudTooltip></MudTd>
-                <MudTd DataLabel="Exec Count">@context.ExecCount</MudTd>
-                <MudTd DataLabel="Avg ms">@context.AvgDurationMs.ToString("F2")</MudTd>
-                <MudTd DataLabel="Total CPU ms">@context.TotalCpuMs.ToString("F2")</MudTd>
-                <MudTd DataLabel="Impact"><MudProgressLinear Color="GetSeverityColor(context.ImpactScore)" Value="GetImpactPercent(context.ImpactScore)" Size="Size.Small" /><MudText Typo="Typo.caption">@context.ImpactScore.ToString("F0")</MudText></MudTd>
-                <MudTd DataLabel="Severity"><SeverityChip Severity="@GetSeverity(context.ImpactScore)" /></MudTd>
-                <MudTd DataLabel="Actions"><MudTooltip Text="Open query"><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" OnClick="() => OpenQuery(context.QueryId)" aria-label="Open query" /></MudTooltip><MudTooltip Text="Copy SQL"><MudIconButton Icon="@Icons.Material.Filled.ContentCopy" OnClick="() => CopySqlAsync(context.SqlText)" aria-label="Copy SQL" /></MudTooltip></MudTd>
-            </RowTemplate>
-        </MudTable>
-    </MudPaper>
-}
-
-@code {
-    private IReadOnlyList<SlowQueryDto> _queries = Array.Empty<SlowQueryDto>();
-    private Timer? _refreshTimer;
-    private bool _loading;
-    private string? _error;
-    private string _searchText = string.Empty;
-    private string _severityFilter = "All";
-    private string _sortOrder = "Impact";
-    private readonly int _topN = 20;
-    private readonly int _lookbackHours = 24;
-    private DateTime _lastRefresh = DateTime.Now;
-
-    private IEnumerable<SlowQueryDto> FilteredQueries => _queries
-        .Where(query => string.IsNullOrWhiteSpace(_searchText) || query.SqlText.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
-        .Where(query => _severityFilter == "All" || GetSeverity(query.ImpactScore) == _severityFilter)
-        .OrderByDescending(query => _sortOrder switch { "Duration" => query.AvgDurationMs, "Executions" => query.ExecCount, "Recent" => query.LastExecutionUtc.Ticks, _ => query.ImpactScore });
-
-    private int HighPriorityCount => _queries.Count(query => query.ImpactScore >= 1_000_000);
-    private double MaxImpact => _queries.Count == 0 ? 0 : _queries.Max(query => query.ImpactScore);
-
-    private async Task RefreshAsync()
-    {
-        await LoadAsync();
-        Snackbar.Add($"Refreshed · {_queries.Count} queries", MudBlazor.Severity.Success);
-    }
-
-    private async Task LoadAsync()
-    {
-        _loading = true;
-        try
-        {
-            var snapshots = await Collector.CollectTopSlowQueriesAsync(_topN, TimeSpan.FromHours(_lookbackHours), CancellationToken.None);
-            _queries = snapshots.Select(ApiMapper.ToDto).ToArray();
-            _lastRefresh = DateTime.Now;
-            _error = null;
-        }
-        catch (Exception exception)
-        {
-            _error = exception.Message;
-        }
-        finally
-        {
-            _loading = false;
-        }
-    }
-
-    private static string GetSeverity(double impact) => impact switch { >= 1_000_000 => "High", >= 100_000 => "Medium", >= 10_000 => "Low", _ => "Info" };
-    private static Color GetSeverityColor(double impact) => GetSeverity(impact) switch { "High" => Color.Error, "Medium" => Color.Warning, "Low" => Color.Info, _ => Color.Default };
-    private double GetImpactPercent(double impact) => MaxImpact == 0 ? 0 : impact / MaxImpact * 100;
-    private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length] + "…";
-    private void OpenQuery(long queryId) => Nav.NavigateTo($"/query/{queryId}");
-    private void HandleRowClick(TableRowClickEventArgs<SlowQueryDto> args) { if (args.Item is not null) OpenQuery(args.Item.QueryId); }
-    private async Task CopySqlAsync(string sql) { await JS.InvokeVoidAsync("navigator.clipboard.writeText", sql); Snackbar.Add("Copied!", MudBlazor.Severity.Success); }
-
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadAsync();
-        _refreshTimer = new Timer(_ => _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); }), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
-    }
-
-    public async ValueTask DisposeAsync() { if (_refreshTimer is not null) await _refreshTimer.DisposeAsync(); }
-}
+<PageTitle>Fleet overview · RADAR</PageTitle>
+<div class="d-flex justify-space-between align-center mb-8 flex-wrap gap-4">
+    <div><MudText Typo="Typo.overline" Class="radar-muted">MISSION CONTROL / FLEET OVERVIEW</MudText><MudText Typo="Typo.h3" Class="radar-brand">Know where the heat is.</MudText><MudText Class="radar-muted">A calm, read-only view of query pressure across your tenant databases.</MudText></div>
+    <div class="d-flex gap-2"><MudChip T="string" Color="Color.Success" Variant="Variant.Outlined">● LIVE COLLECTION</MudChip><MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.FileDownload">Export report</MudButton></div>
+</div>
+<div class="radar-grid radar-grid-4 mb-4">
+    <div class="radar-card radar-kpi radar-kpi-accent"><div class="radar-muted">TENANTS HEALTHY</div><div class="radar-metric text-h3 mt-2">@(Demo.Tenants.Count - 1)</div><div class="radar-muted">of @Demo.Tenants.Count monitored</div></div>
+    <div class="radar-card radar-kpi"><div class="radar-muted">SLOW QUERIES / 24H</div><div class="radar-metric text-h3 mt-2">1,284</div><div class="radar-muted"><span style="color:var(--radar-warning)">+8.4%</span> vs previous period</div></div>
+    <div class="radar-card radar-kpi"><div class="radar-muted">REGRESSIONS</div><div class="radar-metric text-h3 mt-2" style="color:var(--radar-critical)">7</div><div class="radar-muted">3 need attention</div></div>
+    <div class="radar-card radar-kpi"><div class="radar-muted">EST. TIME SAVED</div><div class="radar-metric text-h3 mt-2" style="color:var(--radar-accent)">4.8h</div><div class="radar-muted">if top fixes land</div></div>
+</div>
+<div class="radar-grid radar-grid-2 mb-4">
+    <RadarChart Blips="Demo.Blips" BlipClicked="OpenTenant" />
+    <div class="radar-card radar-card-elevated pa-4"><div class="d-flex justify-space-between align-center mb-4"><div><MudText Typo="Typo.subtitle1">Top features by pain</MudText><MudText Typo="Typo.caption" Class="radar-muted">Weighted impact across fleet</MudText></div><MudIcon Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Primary" /></div>@foreach (var feature in Demo.Features) { <div class="mb-4"><div class="d-flex justify-space-between mb-1"><span>@feature.Feature</span><span class="radar-code radar-muted">@feature.Value.ToString("F0")</span></div><MudProgressLinear Value="@feature.Value" Color="@(feature.Value > 80 ? Color.Error : feature.Value > 60 ? Color.Warning : Color.Primary)" Rounded="true" /></div> }</div>
+</div>
+<HeatmapGrid Rows="Demo.Tenants" Buckets="Demo.Heatmap.Select(x => x.Bucket).Distinct().ToArray()" Cells="Demo.Heatmap" />
+<div class="d-flex justify-space-between align-center mb-3 mt-6"><div><MudText Typo="Typo.h5">Fix once, help N tenants</MudText><MudText Class="radar-muted">Shared query patterns create leverage across the fleet.</MudText></div><MudButton Href="/regressions" Variant="Variant.Text" EndIcon="@Icons.Material.Filled.ArrowForward">View all regressions</MudButton></div>
+<div class="radar-grid radar-grid-2">@foreach (var fix in new[] { ("Orders.Search", "Covering index opportunity", 6, "2.1h"), ("Billing.Invoice", "Parameter-sensitive plan", 4, "1.4h") }) { <div class="radar-card pa-4"><div class="d-flex justify-space-between"><div><MudChip T="string" Size="Size.Small" Color="Color.Primary">@fix.Item1</MudChip><MudText Typo="Typo.subtitle1" Class="mt-3">@fix.Item2</MudText></div><div class="radar-metric" style="color:var(--radar-accent)">@fix.Item4</div></div><div class="d-flex justify-space-between align-center mt-4"><span class="radar-muted">benefits <strong>@fix.Item3 tenants</strong></span><MudButton Variant="Variant.Outlined" Size="Size.Small" Href="/tenants">Inspect</MudButton></div></div> }</div>
+@code { private void OpenTenant(RadarChart.RadarBlip blip) => Nav.NavigateTo($"/tenants?tenant={Uri.EscapeDataString(blip.Name)}"); }
