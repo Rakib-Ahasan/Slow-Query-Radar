@@ -8,6 +8,10 @@ namespace SlowQueryRadar.Core.Models;
 /// </summary>
 public class SlowQuerySnapshot
 {
+    /// <summary>Gets or sets the logical monitoring target name.</summary>
+    public string? TargetName { get; set; }
+    /// <summary>Gets or sets the target group name.</summary>
+    public string? Group { get; set; }
     /// <summary>Gets or sets the Query Store query identifier.</summary>
     public long QueryId { get; set; }
     /// <summary>Gets or sets the Query Store query hash text value.</summary>

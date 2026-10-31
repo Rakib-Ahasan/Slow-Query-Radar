@@ -66,6 +66,8 @@ public class Program
 
         var root = new RootCommand("Slow Query Radar CLI");
         root.Add(CollectCommand.Create(host.Services));
+        root.Add(HistoryCommand.Create(host.Services));
+        root.Add(RegressionsCommand.Create(host.Services));
         root.Add(DoctorCommand.Create(host.Services));
         root.Add(AnalyzeCommand.Create(host.Services));
         root.Add(ReportCommand.Create(host.Services));

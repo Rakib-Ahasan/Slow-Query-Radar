@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SlowQueryRadar.Core.Abstractions;
+using SlowQueryRadar.Core.Models;
 
 namespace SlowQueryRadar.Collector;
 
@@ -20,7 +21,15 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.Configure<QueryStoreOptions>(configuration.GetSection("QueryStore"));
+        services.Configure<MonitoringOptions>(configuration.GetSection("Monitoring"));
+        services.Configure<DiscoveryOptions>(configuration.GetSection("Discovery"));
+        services.Configure<SnapshotStoreOptions>(configuration.GetSection("SnapshotStore"));
+        services.Configure<RegressionDetectionOptions>(configuration.GetSection("RegressionDetection"));
+        services.AddSingleton<ITargetProvider, TargetProvider>();
+        services.AddSingleton<IFleetCollector, FleetCollector>();
         services.AddSingleton<IQueryStoreCollector, QueryStoreCollector>();
+        services.AddSingleton<ISnapshotStore, SqliteSnapshotStore>();
+        services.AddSingleton<IRegressionDetector, RegressionDetector>();
         return services;
     }
 }

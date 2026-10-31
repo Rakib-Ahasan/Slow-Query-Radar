@@ -8,7 +8,9 @@ using SlowQueryRadar.Api.Services;
 using SlowQueryRadar.Benchmark;
 using SlowQueryRadar.Collector;
 using SlowQueryRadar.Core;
+using SlowQueryRadar.Core.Abstractions;
 using SlowQueryRadar.Core.Configuration;
+using SlowQueryRadar.Core.Models;
 using SlowQueryRadar.Profiler;
 using SlowQueryRadar.Suggestions;
 
@@ -41,6 +43,10 @@ builder.Services.AddSlowQueryRadarProfiler(builder.Configuration);
 builder.Services.AddSlowQueryRadarAnalyzer();
 builder.Services.AddSlowQueryRadarSuggestions(builder.Configuration);
 builder.Services.AddSlowQueryRadarBenchmark(builder.Configuration);
+builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection("Notifications"));
+builder.Services.AddHttpClient(nameof(WebhookNotifier));
+builder.Services.AddSingleton<INotifier, WebhookNotifier>();
+builder.Services.AddHostedService<CollectionScheduler>();
 
 var queryStoreConnectionString = builder.Configuration["QueryStore:ConnectionString"];
 if (string.IsNullOrWhiteSpace(queryStoreConnectionString))
