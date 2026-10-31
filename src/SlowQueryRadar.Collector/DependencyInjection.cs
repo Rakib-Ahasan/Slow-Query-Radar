@@ -20,6 +20,10 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.Configure<QueryStoreOptions>(configuration.GetSection("QueryStore"));
+        services.Configure<MonitoringOptions>(configuration.GetSection("Monitoring"));
+        services.Configure<DiscoveryOptions>(configuration.GetSection("Discovery"));
+        services.AddSingleton<ITargetProvider, TargetProvider>();
+        services.AddSingleton<IFleetCollector, FleetCollector>();
         services.AddSingleton<IQueryStoreCollector, QueryStoreCollector>();
         return services;
     }
