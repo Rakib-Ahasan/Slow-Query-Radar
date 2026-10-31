@@ -9,6 +9,7 @@ namespace SlowQueryRadar.Analyzer.Plan;
 /// <summary>Parses selected SQL Server execution-plan information.</summary>
 public sealed class ExecutionPlanParser
 {
+    private static readonly XNamespace Showplan = "http://schemas.microsoft.com/sqlserver/2004/07/showplan";
     /// <summary>Parses execution-plan XML without using XPath.</summary>
     /// <param name="xml">The execution-plan XML.</param>
     /// <returns>A parsed plan, or an empty plan for malformed or empty XML.</returns>
@@ -41,19 +42,30 @@ public sealed class ExecutionPlanParser
                 .Where(suggestion => suggestion is not null)
                 .Cast<MissingIndexSuggestion>()
                 .ToArray();
-            var hasImplicitConversion = elements.Any(ContainsImplicitConversion);
+            var hasImplicitConversion = elements.Any(ContainsImplicitConversion)
+                || elements.Any(element => NameIs(element, "PlanAffectingConvert"));
+            var memoryGrant = elements.FirstOrDefault(element => NameIs(element, "MemoryGrantInfo"));
 
-            return new ParsedPlan(operators, missingIndexes, hasImplicitConversion);
+            return new ParsedPlan(operators, missingIndexes, hasImplicitConversion)
+            {
+                GrantedMemoryKb = DoubleAttribute(memoryGrant, "GrantedMemoryKb"),
+                MaxUsedMemoryKb = DoubleAttribute(memoryGrant, "MaxUsedMemoryKb")
+            };
         }
         catch (XmlException exception)
         {
             Log.Warning(exception, "Malformed execution plan XML could not be parsed");
-            return ParsedPlan.Empty;
+            return new ParsedPlan([], [], false) { IsMalformed = true, ParseError = exception.Message };
         }
         catch (InvalidOperationException exception)
         {
             Log.Warning(exception, "Execution plan XML could not be parsed");
-            return ParsedPlan.Empty;
+            return new ParsedPlan([], [], false) { IsMalformed = true, ParseError = exception.Message };
+        }
+        catch (Exception exception) when (exception is ArgumentException or FormatException)
+        {
+            Log.Warning(exception, "Execution plan XML could not be parsed");
+            return new ParsedPlan([], [], false) { IsMalformed = true, ParseError = exception.Message };
         }
     }
 
@@ -61,6 +73,8 @@ public sealed class ExecutionPlanParser
     {
         var objectElement = element.Descendants().FirstOrDefault(child => NameIs(child, "Object"));
         var predicateElement = element.Descendants().FirstOrDefault(child => NameIs(child, "Predicate"));
+        var runtime = element.Descendants().FirstOrDefault(child => NameIs(child, "RunTimeCountersPerThread"));
+        var warnings = element.Descendants().Where(child => NameIs(child, "Warnings")).ToArray();
         return new PlanOperator(
             AttributeValue(element, "PhysicalOp") ?? string.Empty,
             AttributeValue(element, "LogicalOp") ?? string.Empty,
@@ -68,7 +82,21 @@ public sealed class ExecutionPlanParser
             DoubleAttribute(element, "EstimateCPU"),
             AttributeValue(objectElement, "Table"),
             AttributeValue(objectElement, "Index"),
-            predicateElement?.Value.Trim());
+            predicateElement?.DescendantsAndSelf()
+                .SelectMany(predicate => predicate.Attributes())
+                .FirstOrDefault(attribute => string.Equals(attribute.Name.LocalName, "ScalarString", StringComparison.OrdinalIgnoreCase))?.Value
+                ?? predicateElement?.Value.Trim())
+        {
+            NodeId = AttributeValue(element, "NodeId"),
+            ActualRows = DoubleAttribute(runtime, "ActualRows"),
+            ActualExecutions = DoubleAttribute(runtime, "ActualExecutions"),
+            EstimatedExecutions = Math.Max(1, DoubleAttribute(element, "EstimateExecutions")),
+            HasSpill = warnings.Any(warning => warning.DescendantsAndSelf().Any(child => NameIs(child, "SpillToTempDb"))),
+            HasPlanAffectingConvert = warnings.Any(warning => warning.DescendantsAndSelf().Any(child => NameIs(child, "PlanAffectingConvert"))),
+            HasParallelismSkew = element.Descendants().Any(child => NameIs(child, "RunTimeCountersPerThread")
+                && DoubleAttribute(child, "ActualRows") > 0
+                && DoubleAttribute(child, "ActualRowsRead") > DoubleAttribute(child, "ActualRows") * 2)
+        };
     }
 
     private static MissingIndexSuggestion? ParseMissingIndex(XElement group)
@@ -117,7 +145,8 @@ public sealed class ExecutionPlanParser
             attribute.Value.Contains("CONVERT_IMPLICIT", StringComparison.OrdinalIgnoreCase));
 
     private static bool NameIs(XElement element, string name) =>
-        string.Equals(element.Name.LocalName, name, StringComparison.Ordinal);
+        element.Name.Namespace == Showplan
+        && string.Equals(element.Name.LocalName, name, StringComparison.Ordinal);
 
     private static string? AttributeValue(XElement? element, string name) =>
         element?.Attributes().FirstOrDefault(attribute =>

@@ -20,6 +20,12 @@ public class SlowQuerySnapshot
     public int? ObjectId { get; set; }
     /// <summary>Gets or sets the schema-qualified object name, when available.</summary>
     public string? ObjectName { get; set; }
+    /// <summary>Gets or sets the application feature associated with the query tag.</summary>
+    public string? FeatureName { get; set; }
+    /// <summary>Gets or sets the application caller associated with the query tag.</summary>
+    public string? Caller { get; set; }
+    /// <summary>Gets or sets the tenant identifier associated with the query tag.</summary>
+    public string? TenantId { get; set; }
     /// <summary>Gets or sets the original SQL text.</summary>
     public string SqlText { get; set; } = string.Empty;
     /// <summary>Gets or sets the normalized SQL text hash.</summary>

@@ -99,7 +99,8 @@ public sealed class ClaudeExplainer : IAiExplainer
             }
 
             var first = content[0];
-            return first.TryGetProperty("text", out var text) ? text.GetString() : null;
+            var explanation = first.TryGetProperty("text", out var text) ? text.GetString() : null;
+            return string.IsNullOrWhiteSpace(explanation) ? null : $"AI-generated, verify: {explanation}";
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {

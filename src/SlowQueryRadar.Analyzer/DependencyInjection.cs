@@ -25,6 +25,22 @@ public static class DependencyInjection
         services.AddSingleton<ISqlRule, NonSargableRule>();
         services.AddSingleton<ISqlRule, SelectStarRule>();
         services.AddSingleton<ISqlRule, NPlus1Rule>();
+        services.AddSingleton<IAnalysisRule, LargeScanAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, KeyLookupAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, ImplicitConversionAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, MissingIndexAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, SpillAndMemoryGrantAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, CardinalityMismatchAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, ParallelismAndSortAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, SelectStarAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, NonSargableAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, OrChainAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, ScalarUdfAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, CursorLoopAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, NoLockAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, ParameterSniffingAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, DeathByThousandCutsAnalysisRule>();
+        services.AddSingleton<IAnalysisRule, PhysicalReadPressureAnalysisRule>();
         return services;
     }
 }
