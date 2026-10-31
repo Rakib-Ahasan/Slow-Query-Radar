@@ -7,17 +7,18 @@ namespace SlowQueryRadar.Api.Services;
 /// <summary>Maps Core models to API-owned JSON contracts.</summary>
 public static class ApiMapper
 {
+    private const int MaxSqlTextLength = 16_384;
     /// <summary>Maps a slow-query snapshot.</summary>
     public static SlowQueryDto ToDto(SlowQuerySnapshot snapshot) => new(
         snapshot.QueryId,
-        snapshot.SqlText,
+        LimitSql(snapshot.SqlText) ?? string.Empty,
         snapshot.NormalizedSqlHash,
         snapshot.ExecCount,
         snapshot.AvgDurationMs,
         snapshot.TotalCpuMs,
         snapshot.TotalLogicalReads,
         snapshot.ImpactScore,
-        snapshot.ExecutionPlanXml,
+        LimitSql(snapshot.ExecutionPlanXml),
         snapshot.LastExecutionUtc,
         snapshot.CapturedAtUtc);
 
@@ -32,6 +33,9 @@ public static class ApiMapper
 
     /// <summary>Maps a suggestion.</summary>
     public static SuggestionDto ToDto(Suggestion suggestion) => new(suggestion.DeterministicFix, suggestion.AiExplanation);
+
+    /// <summary>Limits SQL and plan payloads returned to the UI.</summary>
+    public static string? LimitSql(string? value) => string.IsNullOrEmpty(value) || value.Length <= MaxSqlTextLength ? value : value[..MaxSqlTextLength];
 
     /// <summary>Maps a benchmark result.</summary>
     public static BenchmarkResultDto ToDto(BenchmarkResult result) => new(
