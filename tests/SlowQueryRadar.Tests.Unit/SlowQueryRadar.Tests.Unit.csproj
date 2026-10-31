@@ -32,6 +32,7 @@
     <ProjectReference Include="..\..\src\SlowQueryRadar.Suggestions\SlowQueryRadar.Suggestions.csproj" />
     <ProjectReference Include="..\..\src\SlowQueryRadar.Benchmark\SlowQueryRadar.Benchmark.csproj" />
     <ProjectReference Include="..\..\src\SlowQueryRadar.Cli\SlowQueryRadar.Cli.csproj" />
+    <ProjectReference Include="..\..\src\SlowQueryRadar.Api\SlowQueryRadar.Api.csproj" />
   </ItemGroup>
 
 </Project>

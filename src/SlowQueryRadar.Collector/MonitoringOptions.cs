@@ -4,6 +4,9 @@ namespace SlowQueryRadar.Collector;
 /// <summary>Defines monitoring options for multi-target collection.</summary>
 public sealed class MonitoringOptions
 {
+    /// <summary>Gets or sets scheduler interval minutes.</summary>
+    public int IntervalMinutes { get; set; } = 15;
+
     /// <summary>Gets or sets maximum parallel target collections.</summary>
     public int MaxParallelTargets { get; set; } = 4;
 
