@@ -3,12 +3,24 @@
 @implements IAsyncDisposable
 @inject IQueryStoreCollector Collector
 @inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject IJSRuntime JS
 
-<PageTitle>Slow Query Radar</PageTitle>
+<PageTitle>Slow Queries</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-    <MudIcon Icon="@Icons.Material.Filled.Speed" Color="Color.Primary" Size="Size.Large" />
-    <MudText Typo="Typo.h4">Slow Query Radar</MudText>
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.End" Class="mb-6">
+    <MudStack Spacing="0">
+        <MudText Typo="Typo.h5">Slow Queries</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">@_queries.Count queries · Last @_lookbackHours h · Updated @_lastRefresh.ToString("HH:mm:ss")</MudText>
+    </MudStack>
+    <MudStack Row="true" Spacing="2">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RefreshAsync" Disabled="@_loading">Refresh</MudButton>
+        <MudMenu Icon="@Icons.Material.Filled.Settings" aria-label="Dashboard settings">
+            <MudMenuItem Disabled="true">Refresh interval: 60 seconds</MudMenuItem>
+            <MudMenuItem Disabled="true">Showing top @_topN queries</MudMenuItem>
+        </MudMenu>
+    </MudStack>
 </MudStack>
 
 <MudGrid Class="mb-4">
@@ -16,93 +28,114 @@
     {
         @for (var index = 0; index < 4; index++)
         {
-            <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudSkeleton Height="40px" /><MudSkeleton Width="70%" /></MudPaper></MudItem>
+            <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="1" Class="pa-4"><MudSkeleton Height="48px" /><MudSkeleton Width="70%" /></MudPaper></MudItem>
         }
     }
     else
     {
-        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Primary"><MudIcon Icon="@Icons.Material.Filled.Search" /></MudAvatar><MudStack><MudText Typo="Typo.caption">Queries Reviewed</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">@_queries.Count</MudText></MudStack></MudStack></MudPaper></MudItem>
-        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Error"><MudIcon Icon="@Icons.Material.Filled.Warning" /></MudAvatar><MudStack><MudText Typo="Typo.caption">High-Priority</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">@HighPriorityCount</MudText></MudStack></MudStack></MudPaper></MudItem>
-        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Success"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" /></MudAvatar><MudStack><MudText Typo="Typo.caption">Validated Fixes</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">0</MudText></MudStack></MudStack></MudPaper></MudItem>
-        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Info"><MudIcon Icon="@Icons.Material.Filled.Speed" /></MudAvatar><MudStack><MudText Typo="Typo.caption">CPU Saved %</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">0.00%</MudText></MudStack></MudStack></MudPaper></MudItem>
+        <MudItem xs="12" sm="6" md="3"><StatCard Label="Queries Reviewed" Value="@_queries.Count.ToString()" Icon="@Icons.Material.Filled.Search" Color="Color.Primary" /></MudItem>
+        <MudItem xs="12" sm="6" md="3"><StatCard Label="High-Priority" Value="@HighPriorityCount.ToString()" Icon="@Icons.Material.Filled.Warning" Color="Color.Error" /></MudItem>
+        <MudItem xs="12" sm="6" md="3"><StatCard Label="Validated Fixes" Value="0" Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" /></MudItem>
+        <MudItem xs="12" sm="6" md="3"><StatCard Label="Est. CPU Saved %" Value="0.00%" Icon="@Icons.Material.Filled.Speed" Color="Color.Info" /></MudItem>
     }
 </MudGrid>
 
-@if (_error is not null)
+<MudPaper Elevation="1" Class="pa-3 mt-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" md="5">
+            <MudTextField @bind-Value="_searchText" Immediate="true" Label="Search SQL" Placeholder="Search SQL..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Clearable="true" aria-label="Search SQL queries" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="string" @bind-Value="_severityFilter" Label="Severity">
+                <MudSelectItem Value="@("All")">All severities</MudSelectItem>
+                <MudSelectItem Value="@("High")">High</MudSelectItem>
+                <MudSelectItem Value="@("Medium")">Medium</MudSelectItem>
+                <MudSelectItem Value="@("Low")">Low</MudSelectItem>
+                <MudSelectItem Value="@("Info")">Info</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudSelect T="string" @bind-Value="_sortOrder" Label="Sort">
+                <MudSelectItem Value="@("Impact")">Impact</MudSelectItem>
+                <MudSelectItem Value="@("Duration")">Duration</MudSelectItem>
+                <MudSelectItem Value="@("Executions")">Executions</MudSelectItem>
+                <MudSelectItem Value="@("Recent")">Recent</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2"><MudChip T="string" Color="Color.Primary" Class="mt-2">@FilteredQueries.Count() filtered</MudChip></MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (_loading && _queries.Count > 0)
 {
-    <MudAlert Severity="MudSeverity.Error" Class="mb-4">@_error</MudAlert>
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
 }
 
-<MudTable T="SlowQueryDto" Items="_queries" Hover="true" Dense="true" Loading="_loading" OnRowClick="@HandleRowClick">
-    <HeaderContent>
-        <MudTh>QueryId</MudTh>
-        <MudTh>Exec Count</MudTh>
-        <MudTh>Avg ms</MudTh>
-        <MudTh>Total CPU ms</MudTh>
-        <MudTh>Impact</MudTh>
-        <MudTh>Severity</MudTh>
-        <MudTh>Action</MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="QueryId">@context.QueryId</MudTd>
-        <MudTd DataLabel="Exec Count">@context.ExecCount</MudTd>
-        <MudTd DataLabel="Avg ms">@context.AvgDurationMs.ToString("F2")</MudTd>
-        <MudTd DataLabel="Total CPU ms">@context.TotalCpuMs.ToString("F2")</MudTd>
-        <MudTd DataLabel="Impact">
-            <MudText Typo="Typo.caption">@context.ImpactScore.ToString("F2")</MudText>
-            <MudProgressLinear Color="GetSeverityColor(context.ImpactScore)" Value="GetImpactPercent(context.ImpactScore)" />
-        </MudTd>
-        <MudTd DataLabel="Severity"><MudChip T="string" Color="GetSeverityColor(context.ImpactScore)" Size="Size.Small">@GetSeverity(context.ImpactScore)</MudChip></MudTd>
-        <MudTd DataLabel="Action"><MudButton Size="Size.Small" Variant="Variant.Outlined" @onclick="() => OpenQuery(context.QueryId)">Open</MudButton></MudTd>
-    </RowTemplate>
-</MudTable>
+@if (_error is not null)
+{
+    <MudAlert Severity="MudSeverity.Error" Variant="Variant.Outlined" Class="mb-4">Unable to load slow queries. @_error <MudButton Variant="Variant.Text" OnClick="RefreshAsync">Retry</MudButton></MudAlert>
+}
+else if (!_loading && !FilteredQueries.Any())
+{
+    <EmptyState Title="No slow queries detected" Message="Try extending the time range or clearing your filters." Icon="@Icons.Material.Filled.SearchOff">
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RefreshAsync">Refresh</MudButton>
+    </EmptyState>
+}
+else
+{
+    <MudPaper Elevation="1" Class="pa-2" Style="overflow-x:auto">
+        <MudTable T="SlowQueryDto" Items="FilteredQueries" Hover="true" Dense="true" Bordered="false" OnRowClick="HandleRowClick">
+            <HeaderContent>
+                <MudTh>Query</MudTh><MudTh>SQL Preview</MudTh><MudTh>Exec Count</MudTh><MudTh>Avg ms</MudTh><MudTh>Total CPU ms</MudTh><MudTh>Impact</MudTh><MudTh>Severity</MudTh><MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Query"><MudChip T="string" Size="Size.Small" Color="Color.Primary">#@context.QueryId</MudChip></MudTd>
+                <MudTd DataLabel="SQL Preview"><MudTooltip Text="@context.SqlText"><MudText Class="sql-preview" Typo="Typo.body2">@Truncate(context.SqlText, 80)</MudText></MudTooltip></MudTd>
+                <MudTd DataLabel="Exec Count">@context.ExecCount</MudTd>
+                <MudTd DataLabel="Avg ms">@context.AvgDurationMs.ToString("F2")</MudTd>
+                <MudTd DataLabel="Total CPU ms">@context.TotalCpuMs.ToString("F2")</MudTd>
+                <MudTd DataLabel="Impact"><MudProgressLinear Color="GetSeverityColor(context.ImpactScore)" Value="GetImpactPercent(context.ImpactScore)" Size="Size.Small" /><MudText Typo="Typo.caption">@context.ImpactScore.ToString("F0")</MudText></MudTd>
+                <MudTd DataLabel="Severity"><SeverityChip Severity="@GetSeverity(context.ImpactScore)" /></MudTd>
+                <MudTd DataLabel="Actions"><MudTooltip Text="Open query"><MudIconButton Icon="@Icons.Material.Filled.OpenInNew" OnClick="() => OpenQuery(context.QueryId)" aria-label="Open query" /></MudTooltip><MudTooltip Text="Copy SQL"><MudIconButton Icon="@Icons.Material.Filled.ContentCopy" OnClick="() => CopySqlAsync(context.SqlText)" aria-label="Copy SQL" /></MudTooltip></MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+}
 
 @code {
     private IReadOnlyList<SlowQueryDto> _queries = Array.Empty<SlowQueryDto>();
     private Timer? _refreshTimer;
     private bool _loading;
     private string? _error;
+    private string _searchText = string.Empty;
+    private string _severityFilter = "All";
+    private string _sortOrder = "Impact";
+    private readonly int _topN = 20;
+    private readonly int _lookbackHours = 24;
+    private DateTime _lastRefresh = DateTime.Now;
+
+    private IEnumerable<SlowQueryDto> FilteredQueries => _queries
+        .Where(query => string.IsNullOrWhiteSpace(_searchText) || query.SqlText.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+        .Where(query => _severityFilter == "All" || GetSeverity(query.ImpactScore) == _severityFilter)
+        .OrderByDescending(query => _sortOrder switch { "Duration" => query.AvgDurationMs, "Executions" => query.ExecCount, "Recent" => query.LastExecutionUtc.Ticks, _ => query.ImpactScore });
 
     private int HighPriorityCount => _queries.Count(query => query.ImpactScore >= 1_000_000);
-
-    private static string GetSeverity(double impact) => impact switch
-    {
-        >= 1_000_000 => "High",
-        >= 100_000 => "Medium",
-        >= 10_000 => "Low",
-        _ => "Info"
-    };
-
     private double MaxImpact => _queries.Count == 0 ? 0 : _queries.Max(query => query.ImpactScore);
 
-    private double GetImpactPercent(double impact) => MaxImpact == 0 ? 0 : impact / MaxImpact * 100;
-
-    private static Color GetSeverityColor(double impact) => GetSeverity(impact) switch
-    {
-        "High" => Color.Error,
-        "Medium" => Color.Warning,
-        "Low" => Color.Info,
-        _ => Color.Default
-    };
-
-    protected override async Task OnInitializedAsync()
+    private async Task RefreshAsync()
     {
         await LoadAsync();
-        _refreshTimer = new Timer(_ => _ = InvokeAsync(async () =>
-        {
-            await LoadAsync();
-            StateHasChanged();
-        }), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+        Snackbar.Add($"Refreshed · {_queries.Count} queries", MudBlazor.Severity.Success);
     }
-
 
     private async Task LoadAsync()
     {
         _loading = true;
         try
         {
-            var snapshots = await Collector.CollectTopSlowQueriesAsync(20, TimeSpan.FromHours(24), CancellationToken.None);
+            var snapshots = await Collector.CollectTopSlowQueriesAsync(_topN, TimeSpan.FromHours(_lookbackHours), CancellationToken.None);
             _queries = snapshots.Select(ApiMapper.ToDto).ToArray();
+            _lastRefresh = DateTime.Now;
             _error = null;
         }
         catch (Exception exception)
@@ -115,24 +148,19 @@
         }
     }
 
-    private void OpenQuery(long queryId)
+    private static string GetSeverity(double impact) => impact switch { >= 1_000_000 => "High", >= 100_000 => "Medium", >= 10_000 => "Low", _ => "Info" };
+    private static Color GetSeverityColor(double impact) => GetSeverity(impact) switch { "High" => Color.Error, "Medium" => Color.Warning, "Low" => Color.Info, _ => Color.Default };
+    private double GetImpactPercent(double impact) => MaxImpact == 0 ? 0 : impact / MaxImpact * 100;
+    private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length] + "…";
+    private void OpenQuery(long queryId) => Nav.NavigateTo($"/query/{queryId}");
+    private void HandleRowClick(TableRowClickEventArgs<SlowQueryDto> args) { if (args.Item is not null) OpenQuery(args.Item.QueryId); }
+    private async Task CopySqlAsync(string sql) { await JS.InvokeVoidAsync("navigator.clipboard.writeText", sql); Snackbar.Add("Copied!", MudBlazor.Severity.Success); }
+
+    protected override async Task OnInitializedAsync()
     {
-        Nav.NavigateTo($"/query/{queryId}", forceLoad: true);
+        await LoadAsync();
+        _refreshTimer = new Timer(_ => _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); }), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
     }
 
-    private void HandleRowClick(TableRowClickEventArgs<SlowQueryDto> args)
-    {
-        if (args.Item is not null)
-        {
-            OpenQuery(args.Item.QueryId);
-        }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (_refreshTimer is not null)
-        {
-            await _refreshTimer.DisposeAsync();
-        }
-    }
+    public async ValueTask DisposeAsync() { if (_refreshTimer is not null) await _refreshTimer.DisposeAsync(); }
 }

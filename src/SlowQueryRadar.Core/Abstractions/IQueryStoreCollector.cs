@@ -13,6 +13,14 @@ namespace SlowQueryRadar.Core.Abstractions;
 public interface IQueryStoreCollector
 {
     /// <summary>
+    /// Collects slow-query snapshots using the specified collection options.
+    /// </summary>
+    /// <param name="options">The collection options.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The collection result with snapshots and warnings.</returns>
+    Task<CollectResult> CollectAsync(CollectOptions options, CancellationToken ct);
+
+    /// <summary>
     /// Collects the top N slow queries from Query Store.
     /// </summary>
     /// <param name="topN">Number of top queries to collect.</param>

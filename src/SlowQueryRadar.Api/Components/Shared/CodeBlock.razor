@@ -1,0 +1,24 @@
+@* src/SlowQueryRadar.Api/Components/Shared/CodeBlock.razor *@
+<MudPaper Elevation="1" Class="code-block pa-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Class="mb-2">
+        <MudText Typo="Typo.caption">@Title</MudText>
+        <MudTooltip Text="Copy to clipboard">
+            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Inherit" OnClick="CopyAsync" aria-label="Copy code" />
+        </MudTooltip>
+    </MudStack>
+    <pre>@Code</pre>
+</MudPaper>
+
+@code {
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Code { get; set; } = string.Empty;
+    [Parameter] public string Title { get; set; } = "Code";
+
+    private async Task CopyAsync()
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", Code);
+        Snackbar.Add("Copied!", global::MudBlazor.Severity.Success);
+    }
+}

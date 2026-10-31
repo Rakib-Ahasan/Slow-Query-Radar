@@ -1,0 +1,19 @@
+@* src/SlowQueryRadar.Api/Components/Shared/EmptyState.razor *@
+<MudPaper Elevation="0" Class="pa-8 text-center">
+    <MudIcon Icon="@Icon" Size="Size.Large" Color="Color.Default" />
+    <MudText Typo="Typo.h6" Class="mt-3">@Title</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@Message</MudText>
+    @if (ChildContent is not null)
+    {
+        <MudStack Row="true" Justify="Justify.Center" Class="mt-4">
+            @ChildContent
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public string Icon { get; set; } = Icons.Material.Filled.SearchOff;
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Message { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

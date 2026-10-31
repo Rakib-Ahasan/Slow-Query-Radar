@@ -1,67 +1,81 @@
 @page "/reports/weekly"
+@rendermode InteractiveServer
 @inject IQueryStoreCollector Collector
+@inject IJSRuntime JS
 
 <PageTitle>Weekly Report</PageTitle>
 
-<div class="print-report">
-    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4 no-print">
-        <MudText Typo="Typo.h4">Weekly report</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="Print">Download PDF</MudButton>
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.End" Class="mb-6 no-print">
+    <MudStack Spacing="0">
+        <MudText Typo="Typo.h5">Weekly Report</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Last 7 days · generated @_generatedAt.ToString("MMM d, yyyy HH:mm")</MudText>
     </MudStack>
+    <MudStack Row="true" Spacing="2">
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download" OnClick="Print">Export PDF</MudButton>
+        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Print" OnClick="Print">Print</MudButton>
+    </MudStack>
+</MudStack>
 
-    <MudText Typo="Typo.h4" Class="print-only">Slow Query Radar — Weekly Report</MudText>
-    <MudGrid Class="mb-4">
-        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Primary"><MudIcon Icon="@Icons.Material.Filled.Search" /></MudAvatar><MudStack><MudText Typo="Typo.caption">Queries Reviewed</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">@_queries.Count</MudText></MudStack></MudStack></MudPaper></MudItem>
-        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Error"><MudIcon Icon="@Icons.Material.Filled.Warning" /></MudAvatar><MudStack><MudText Typo="Typo.caption">High-Priority</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">@HighPriorityCount</MudText></MudStack></MudStack></MudPaper></MudItem>
-        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Success"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" /></MudAvatar><MudStack><MudText Typo="Typo.caption">Validated Fixes</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">0</MudText></MudStack></MudStack></MudPaper></MudItem>
-        <MudItem xs="12" sm="6" md="3"><MudPaper Elevation="2" Class="pa-4"><MudStack Row="true" AlignItems="AlignItems.Center"><MudAvatar Color="Color.Info"><MudIcon Icon="@Icons.Material.Filled.Speed" /></MudAvatar><MudStack><MudText Typo="Typo.caption">CPU Saved %</MudText><MudText Typo="Typo.h4" Class="font-weight-bold">0.00%</MudText></MudStack></MudStack></MudPaper></MudItem>
-    </MudGrid>
+<MudText Typo="Typo.h4" Class="print-only">Slow Query Radar — Weekly Report</MudText>
 
-    @if (_error is not null)
-    {
-        <MudAlert Severity="MudSeverity.Error" Class="mb-4">@_error</MudAlert>
-    }
+@if (_error is not null)
+{
+    <MudAlert Severity="MudSeverity.Error" Class="mb-4">Unable to generate report. @_error</MudAlert>
+}
 
-    <MudText Typo="Typo.h6" Class="mb-2">Top 10 slow queries</MudText>
-    <MudTable Items="_queries.Take(10)" Dense="true" Hover="true">
-        <HeaderContent><MudTh>QueryId</MudTh><MudTh>Average ms</MudTh><MudTh>Total CPU ms</MudTh><MudTh>Impact</MudTh></HeaderContent>
-        <RowTemplate><MudTd>@context.QueryId</MudTd><MudTd>@context.AvgDurationMs.ToString("F2")</MudTd><MudTd>@context.TotalCpuMs.ToString("F2")</MudTd><MudTd><MudText Typo="Typo.caption">@context.ImpactScore.ToString("F2")</MudText><MudProgressLinear Color="GetSeverityColor(context.ImpactScore)" Value="GetImpactPercent(context.ImpactScore)" /></MudTd></RowTemplate>
-    </MudTable>
+<MudGrid Class="mb-4">
+    <MudItem xs="12" sm="6" md="3"><StatCard Label="Queries Reviewed" Value="@_queries.Count.ToString()" Icon="@Icons.Material.Filled.Search" Color="Color.Primary" /></MudItem>
+    <MudItem xs="12" sm="6" md="3"><StatCard Label="High-Priority" Value="@HighPriorityCount.ToString()" Icon="@Icons.Material.Filled.Warning" Color="Color.Error" /></MudItem>
+    <MudItem xs="12" sm="6" md="3"><StatCard Label="Validated Fixes" Value="0" Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" /></MudItem>
+    <MudItem xs="12" sm="6" md="3"><StatCard Label="Est. CPU Saved %" Value="0.00%" Icon="@Icons.Material.Filled.Speed" Color="Color.Info" /></MudItem>
+</MudGrid>
 
-    <MudText Typo="Typo.h6" Class="mt-6 mb-2">Findings by severity</MudText>
-    <MudChart ChartType="ChartType.Bar" ChartSeries="_severitySeries" ChartLabels="_severityLabels" Height="280px" />
+<MudPaper Elevation="1" Class="pa-4 mt-4">
+    <MudText Typo="Typo.subtitle2">Trends</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">Historical trend data will appear after weekly snapshots are recorded.</MudText>
+    <MudChart ChartType="ChartType.Line" ChartSeries="_trendSeries" ChartLabels="_trendLabels" Height="280px" />
+</MudPaper>
 
-    <MudText Typo="Typo.h6" Class="mt-6 mb-2">Validated fixes</MudText>
-    <MudAlert Severity="MudSeverity.Info">No validated benchmark fixes are available in the current report state.</MudAlert>
-</div>
+<MudText Typo="Typo.h6" Class="mt-6 mb-2">Top 10 slow queries</MudText>
+@if (_queries.Count == 0)
+{
+    <EmptyState Title="No slow queries detected" Message="There are no slow queries in the selected reporting window." />
+}
+else
+{
+    <MudPaper Elevation="1" Class="pa-2" Style="overflow-x:auto">
+        <MudTable Items="_queries.Take(10)" Dense="true" Hover="true">
+            <HeaderContent><MudTh>QueryId</MudTh><MudTh>Average ms</MudTh><MudTh>Total CPU ms</MudTh><MudTh>Impact</MudTh><MudTh>Severity</MudTh></HeaderContent>
+            <RowTemplate><MudTd DataLabel="QueryId"><MudChip T="string" Size="Size.Small" Color="Color.Primary">#@context.QueryId</MudChip></MudTd><MudTd DataLabel="Average ms">@context.AvgDurationMs.ToString("F2")</MudTd><MudTd DataLabel="Total CPU ms">@context.TotalCpuMs.ToString("F2")</MudTd><MudTd DataLabel="Impact"><MudProgressLinear Color="GetSeverityColor(context.ImpactScore)" Value="GetImpactPercent(context.ImpactScore)" /><MudText Typo="Typo.caption">@context.ImpactScore.ToString("F0")</MudText></MudTd><MudTd DataLabel="Severity"><SeverityChip Severity="@GetSeverity(context.ImpactScore)" /></MudTd></RowTemplate>
+        </MudTable>
+    </MudPaper>
+}
+
+<MudGrid Class="mt-6">
+    <MudItem xs="12" md="6">
+        <MudText Typo="Typo.h6" Class="mb-2">Fixes applied this week</MudText>
+        <EmptyState Title="No fixes validated this week" Message="Benchmark results saved as baselines will be summarized here." Icon="@Icons.Material.Filled.CheckCircle" />
+    </MudItem>
+    <MudItem xs="12" md="6">
+        <MudText Typo="Typo.h6" Class="mb-2">Recommendations</MudText>
+        <MudAlert Severity="MudSeverity.Info" Icon="@Icons.Material.Filled.Lightbulb">Review the highest-impact queries first, then validate suggested fixes with the benchmark workflow.</MudAlert>
+        <MudAlert Severity="MudSeverity.Info" Icon="@Icons.Material.Filled.Security" Class="mt-2">Production remains read-only. Apply any SQL changes manually during an approved maintenance window.</MudAlert>
+    </MudItem>
+</MudGrid>
+
+<MudText Typo="Typo.caption" Class="mt-8 print-only">Generated by Slow Query Radar v0.1 · Confidential — internal use only</MudText>
 
 @code {
-    [Inject] private IJSRuntime Js { get; set; } = default!;
     private IReadOnlyList<SlowQueryDto> _queries = Array.Empty<SlowQueryDto>();
     private string? _error;
-    private readonly string[] _severityLabels = ["High", "Medium", "Low", "Info"];
-    private readonly List<ChartSeries<double>> _severitySeries = [new() { Name = "Findings", Data = new ChartData<double>(new double[] { 0, 0, 0, 0 }) }];
-
+    private DateTime _generatedAt = DateTime.Now;
+    private readonly string[] _trendLabels = ["Week 1", "Week 2", "Week 3", "Week 4"];
+    private readonly List<ChartSeries<double>> _trendSeries = [new() { Name = "Slow queries", Data = new ChartData<double>([0, 0, 0, 0]) }];
     private int HighPriorityCount => _queries.Count(query => query.ImpactScore >= 1_000_000);
     private double MaxImpact => _queries.Count == 0 ? 0 : _queries.Max(query => query.ImpactScore);
-
     private double GetImpactPercent(double impact) => MaxImpact == 0 ? 0 : impact / MaxImpact * 100;
-
-    private static string GetSeverity(double impact) => impact switch
-    {
-        >= 1_000_000 => "High",
-        >= 100_000 => "Medium",
-        >= 10_000 => "Low",
-        _ => "Info"
-    };
-
-    private static Color GetSeverityColor(double impact) => GetSeverity(impact) switch
-    {
-        "High" => Color.Error,
-        "Medium" => Color.Warning,
-        "Low" => Color.Info,
-        _ => Color.Default
-    };
+    private static string GetSeverity(double impact) => impact switch { >= 1_000_000 => "High", >= 100_000 => "Medium", >= 10_000 => "Low", _ => "Info" };
+    private static Color GetSeverityColor(double impact) => GetSeverity(impact) switch { "High" => Color.Error, "Medium" => Color.Warning, "Low" => Color.Info, _ => Color.Default };
 
     protected override async Task OnInitializedAsync()
     {
@@ -69,22 +83,11 @@
         {
             var snapshots = await Collector.CollectTopSlowQueriesAsync(10, TimeSpan.FromHours(168), CancellationToken.None);
             _queries = snapshots.Select(ApiMapper.ToDto).ToArray();
+            _generatedAt = DateTime.Now;
         }
-        catch (Exception exception)
-        {
-            _error = exception.Message;
-        }
+        catch (Exception exception) { _error = exception.Message; }
     }
 
-    private Task Print() => Js.InvokeVoidAsync("window.print").AsTask();
+    private Task Print() => JS.InvokeVoidAsync("window.print").AsTask();
 }
 
-<style>
-    .print-only { display: none; }
-    @@media print {
-        .no-print { display: none !important; }
-        .print-only { display: block; }
-        .mud-appbar, .mud-drawer { display: none !important; }
-        body { background: white; }
-    }
-</style>

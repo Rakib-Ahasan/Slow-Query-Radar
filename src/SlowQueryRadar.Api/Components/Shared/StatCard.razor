@@ -1,0 +1,25 @@
+@* src/SlowQueryRadar.Api/Components/Shared/StatCard.razor *@
+<MudPaper Elevation="1" Class="pa-4 stat-card">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+        <MudAvatar Color="@Color" Size="Size.Large">
+            <MudIcon Icon="@Icon" />
+        </MudAvatar>
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.caption">@Label</MudText>
+            <MudText Typo="Typo.h4" Class="font-weight-bold">@Value</MudText>
+            @if (!string.IsNullOrWhiteSpace(Delta))
+            {
+                <MudChip T="string" Size="Size.Small" Color="@DeltaColor">@Delta</MudChip>
+            }
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+    [Parameter] public string? Delta { get; set; }
+    [Parameter] public Color DeltaColor { get; set; } = Color.Default;
+}

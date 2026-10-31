@@ -1,25 +1,49 @@
-﻿@inherits LayoutComponentBase
+﻿@* src/SlowQueryRadar.Api/Components/Layout/MainLayout.razor *@
+@inherits LayoutComponentBase
+@inject IJSRuntime JS
 
-<MudThemeProvider @bind-IsDarkMode="_isDarkMode" />
+<MudThemeProvider Theme="_theme" @bind-IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="1">
-        <MudIcon Icon="@Icons.Material.Filled.Speed" Class="mr-2" />
-        <MudText Typo="Typo.h6">Slow Query Radar</MudText>
+    <MudAppBar Elevation="0" Class="app-bar">
+        <MudIcon Icon="@Icons.Material.Filled.Speed" Color="Color.Inherit" Class="mr-2" />
+        <MudText Typo="Typo.h6" Class="font-weight-bold">Slow Query Radar</MudText>
+        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+            <MudNavMenu Class="ml-8">
+                <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+                <MudNavLink Href="/reports/weekly" Icon="@Icons.Material.Filled.Assessment">Weekly Report</MudNavLink>
+            </MudNavMenu>
+        </MudHidden>
+        <MudHidden Breakpoint="Breakpoint.MdAndUp">
+            <MudSpacer />
+            <MudMenu Icon="@Icons.Material.Filled.Menu" aria-label="Open navigation menu">
+                <MudMenuItem Href="/" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudMenuItem>
+                <MudMenuItem Href="/reports/weekly" Icon="@Icons.Material.Filled.Assessment">Weekly Report</MudMenuItem>
+            </MudMenu>
+        </MudHidden>
         <MudSpacer />
-        <MudButton Href="/reports/weekly" Variant="Variant.Text" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.Assessment">Weekly Report</MudButton>
-        <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Color="Color.Inherit" OnClick="ToggleTheme" aria-label="Toggle theme" />
-        <MudIconButton Icon="@Icons.Material.Filled.Code" Color="Color.Inherit" Href="https://github.com/Rakib-Ahasan/Slow-Query-Radar" Target="_blank" aria-label="GitHub repository" />
+        <MudChip T="string" Color="Color.Info" Size="Size.Small" Class="mr-2">Read-only</MudChip>
+        <MudTooltip Text="Toggle dark mode">
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Color="Color.Inherit" OnClick="ToggleThemeAsync" aria-label="Toggle dark mode" />
+        </MudTooltip>
+        <MudTooltip Text="Open GitHub">
+            <MudIconButton Icon="@Icons.Custom.Brands.GitHub" Color="Color.Inherit" Href="https://github.com/Rakib-Ahasan/Slow-Query-Radar" Target="_blank" aria-label="Open GitHub repository" />
+        </MudTooltip>
     </MudAppBar>
-    <MudMainContent Class="pa-4">
-        @Body
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.False" Class="content-shell">
+            <div class="content-width">
+                @Body
+            </div>
+        </MudContainer>
     </MudMainContent>
 </MudLayout>
 
-<MudPaper Square="true" Elevation="0" Class="pa-3 text-center">
+<MudPaper Square="true" Elevation="0" Class="app-footer">
     <MudText Typo="Typo.caption">Slow Query Radar · v0.1 · Read-only · Ai: disabled</MudText>
 </MudPaper>
 
@@ -32,8 +56,36 @@
 @code {
     private bool _isDarkMode;
 
-    private void ToggleTheme()
+    private MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#4F46E5", PrimaryDarken = "#4338CA", PrimaryLighten = "#6366F1", Secondary = "#06B6D4", Tertiary = "#8B5CF6", Success = "#10B981", Warning = "#F59E0B", Error = "#EF4444", Info = "#3B82F6", Background = "#F8FAFC", Surface = "#FFFFFF", AppbarBackground = "#4F46E5", DrawerBackground = "#FFFFFF", TextPrimary = "#0F172A", TextSecondary = "#64748B", Divider = "#E2E8F0"
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#818CF8", Background = "#0F172A", Surface = "#1E293B", AppbarBackground = "#1E293B", TextPrimary = "#F1F5F9", TextSecondary = "#94A3B8", Divider = "#334155"
+        },
+        Typography = new Typography
+        {
+            Default = new DefaultTypography { FontFamily = ["Inter", "system-ui", "-apple-system", "sans-serif"], FontSize = "0.875rem", LineHeight = "1.6" },
+            H1 = new H1Typography { FontWeight = "600", LetterSpacing = "-0.02em" }, H2 = new H2Typography { FontWeight = "600", LetterSpacing = "-0.02em" }, H3 = new H3Typography { FontWeight = "600", LetterSpacing = "-0.02em" }, H4 = new H4Typography { FontWeight = "600", LetterSpacing = "-0.02em" }, H5 = new H5Typography { FontWeight = "600", LetterSpacing = "-0.02em" }, H6 = new H6Typography { FontWeight = "600", LetterSpacing = "-0.02em" }, Caption = new CaptionTypography { FontSize = "0.75rem", LetterSpacing = "0.02em" }
+        },
+        LayoutProperties = new LayoutProperties { DefaultBorderRadius = "10px" }
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _isDarkMode = await JS.InvokeAsync<bool>("localStorage.getItem", "slowQueryRadar.darkMode");
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleThemeAsync()
     {
         _isDarkMode = !_isDarkMode;
+        await JS.InvokeVoidAsync("localStorage.setItem", "slowQueryRadar.darkMode", _isDarkMode);
     }
 }
